@@ -1,3 +1,7 @@
 package main
 
-func main() {}
+import "github.com/tmitry/shorturl/internal/app"
+
+func main() {
+	app.StartServer()
+}
