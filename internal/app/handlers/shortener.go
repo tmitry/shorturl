@@ -8,12 +8,19 @@ import (
 
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
+	"github.com/tmitry/shorturl/internal/app/util"
 )
 
 const messageIncorrectURL = "incorrect URL"
 
 type ShortenerHandler struct {
 	Rep repositories.Repository
+}
+
+func NewShortenerHandler(rep repositories.Repository) *ShortenerHandler {
+	return &ShortenerHandler{
+		Rep: rep,
+	}
 }
 
 func (h ShortenerHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
@@ -39,8 +46,12 @@ func (h ShortenerHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	shortURL := h.Rep.Add(url)
+	id := h.Rep.ReserveID()
+	shortURL := models.NewShortURL(id, url, models.UID(util.GenerateUniqueHash(id)))
 
+	h.Rep.Add(shortURL)
+
+	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	writer.WriteHeader(http.StatusCreated)
 	_, err = writer.Write([]byte(shortURL.GetShortURL()))
 
