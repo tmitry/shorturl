@@ -17,15 +17,11 @@ func NewServer() *http.Server {
 
 	rep := repositories.NewMemoryRepository()
 
-	shortenerHandler := handlers.ShortenerHandler{
-		Rep: rep,
-	}
+	shortenerHandler := handlers.NewShortenerHandler(rep)
 	router.Handle("/", shortenerHandler).Methods("POST")
 
-	redirectHandler := handlers.RedirectHandler{
-		Rep: rep,
-	}
-	router.Handle(fmt.Sprintf("/{id:%s}", config.PatternUID), redirectHandler).Methods("GET")
+	redirectHandler := handlers.NewRedirectHandler(rep)
+	router.Handle(fmt.Sprintf("/{%s:%s}", handlers.ParameterNameUID, config.PatternUID), redirectHandler).Methods("GET")
 
 	server := &http.Server{
 		Addr:              config.DefaultAddr,
