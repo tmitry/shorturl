@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -8,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tmitry/shorturl/internal/app/config"
@@ -42,9 +43,9 @@ func TestRedirectHandler(t *testing.T) {
 			name:    "UID parameter doesnt exist",
 			request: map[string]string{},
 			want: want{
-				statusCode:  http.StatusNotFound,
+				statusCode:  http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				content:     "404 page not found",
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectUID),
 				location:    "",
 			},
 		},
@@ -52,9 +53,9 @@ func TestRedirectHandler(t *testing.T) {
 			name:    "wrong UID parameter name",
 			request: map[string]string{"u_id": "gIJsL"},
 			want: want{
-				statusCode:  http.StatusNotFound,
+				statusCode:  http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				content:     "404 page not found",
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectUID),
 				location:    "",
 			},
 		},
@@ -113,7 +114,12 @@ func TestRedirectHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, config.DefaultAddr, nil)
-			request = mux.SetURLVars(request, tt.request)
+
+			routeCtx := chi.NewRouteContext()
+			for param, value := range tt.request {
+				routeCtx.URLParams.Add(param, value)
+			}
+			request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
 			recorder := httptest.NewRecorder()
 

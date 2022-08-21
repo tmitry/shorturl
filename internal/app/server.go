@@ -6,23 +6,27 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/tmitry/shorturl/internal/app/config"
 	"github.com/tmitry/shorturl/internal/app/handlers"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
 
-func NewServer() *http.Server {
-	router := mux.NewRouter()
+func NewRouter() http.Handler {
+	router := chi.NewRouter()
 
 	rep := repositories.NewMemoryRepository()
 
 	shortenerHandler := handlers.NewShortenerHandler(rep)
-	router.Handle("/", shortenerHandler).Methods("POST")
+	router.Post("/", shortenerHandler.ServeHTTP)
 
 	redirectHandler := handlers.NewRedirectHandler(rep)
-	router.Handle(fmt.Sprintf("/{%s:%s}", handlers.ParameterNameUID, config.PatternUID), redirectHandler).Methods("GET")
+	router.Get(fmt.Sprintf("/{%s:%s}", handlers.ParameterNameUID, config.PatternUID), redirectHandler.ServeHTTP)
 
+	return router
+}
+
+func NewServer(router http.Handler) *http.Server {
 	server := &http.Server{
 		Addr:              config.DefaultAddr,
 		Handler:           router,
@@ -33,7 +37,8 @@ func NewServer() *http.Server {
 }
 
 func StartServer() {
-	server := NewServer()
+	router := NewRouter()
+	server := NewServer(router)
 
 	log.Fatal(server.ListenAndServe())
 }
