@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
@@ -28,15 +28,7 @@ func NewRedirectHandler(rep repositories.Repository) *RedirectHandler {
 }
 
 func (h RedirectHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-
-	if _, ok := vars[ParameterNameUID]; !ok {
-		http.NotFound(writer, r)
-
-		return
-	}
-
-	uid := models.UID(vars[ParameterNameUID])
+	uid := models.UID(chi.URLParam(r, ParameterNameUID))
 
 	isValid, err := uid.IsValid()
 	if err != nil {

@@ -49,7 +49,7 @@ func (h ShortenerHandler) ServeHTTP(writer http.ResponseWriter, r *http.Request)
 	id := h.Rep.ReserveID()
 	shortURL := models.NewShortURL(id, url, models.UID(util.GenerateUniqueHash(id)))
 
-	h.Rep.Add(shortURL)
+	h.Rep.Save(shortURL)
 
 	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	writer.WriteHeader(http.StatusCreated)
