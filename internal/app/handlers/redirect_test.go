@@ -25,7 +25,7 @@ func TestRedirectHandler(t *testing.T) {
 	id := rep.ReserveID()
 	url := models.URL("https://example.com/")
 	shortURL := models.NewShortURL(id, url, models.UID(util.GenerateUniqueHash(id)))
-	rep.Add(shortURL)
+	rep.Save(shortURL)
 
 	type want struct {
 		contentType string
