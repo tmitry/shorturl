@@ -1,6 +1,8 @@
 package main
 
-import "github.com/tmitry/shorturl/internal/app"
+import (
+	"github.com/tmitry/shorturl/internal/app"
+)
 
 func main() {
 	app.StartServer()

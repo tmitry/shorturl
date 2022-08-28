@@ -15,7 +15,6 @@ import (
 	"github.com/tmitry/shorturl/internal/app/config"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
-	"github.com/tmitry/shorturl/internal/app/util"
 )
 
 func TestShortenerHandler_Shorten(t *testing.T) {
@@ -59,7 +58,7 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodPost, config.DefaultAddr, strings.NewReader(testCase.url))
+			request := httptest.NewRequest(http.MethodPost, config.ServerCfg.Address, strings.NewReader(testCase.url))
 
 			recorder := httptest.NewRecorder()
 
@@ -89,7 +88,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 
 	id := rep.ReserveID()
 	url := models.URL("https://example.com/")
-	shortURL := models.NewShortURL(id, url, models.UID(util.GenerateUniqueHash(id)))
+	shortURL := models.NewShortURL(id, url, models.GenerateUID(id))
 	rep.Save(shortURL)
 
 	type want struct {
@@ -181,7 +180,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodGet, config.DefaultAddr, nil)
+			request := httptest.NewRequest(http.MethodGet, config.ServerCfg.Address, nil)
 			request.Header.Set("Content-Type", ContentTypeText)
 
 			routeCtx := chi.NewRouteContext()

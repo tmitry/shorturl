@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
-	"github.com/tmitry/shorturl/internal/app/util"
 )
 
 const (
@@ -54,7 +53,7 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 	}
 
 	id := h.Rep.ReserveID()
-	shortURL := models.NewShortURL(id, url, models.UID(util.GenerateUniqueHash(id)))
+	shortURL := models.NewShortURL(id, url, models.GenerateUID(id))
 
 	h.Rep.Save(shortURL)
 

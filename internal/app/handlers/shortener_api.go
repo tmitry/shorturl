@@ -10,7 +10,6 @@ import (
 
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
-	"github.com/tmitry/shorturl/internal/app/util"
 )
 
 type requestJSON struct {
@@ -74,7 +73,7 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 	}
 
 	id := h.Rep.ReserveID()
-	shortURL := models.NewShortURL(id, requestJSON.URL, models.UID(util.GenerateUniqueHash(id)))
+	shortURL := models.NewShortURL(id, requestJSON.URL, models.GenerateUID(id))
 
 	h.Rep.Save(shortURL)
 
