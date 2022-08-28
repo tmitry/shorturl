@@ -20,6 +20,6 @@ func NewShortURL(id int, url URL, uid UID) *ShortURL {
 	}
 }
 
-func (s ShortURL) GetShortURL() string {
-	return fmt.Sprintf("%s://%s/%s", config.DefaultProtocol, config.DefaultAddr, s.UID.String())
+func (s ShortURL) GetShortURL() URL {
+	return URL(fmt.Sprintf("%s://%s/%s", config.DefaultProtocol, config.DefaultAddr, s.UID.String()))
 }

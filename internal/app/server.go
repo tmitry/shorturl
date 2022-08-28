@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/tmitry/shorturl/internal/app/config"
 	"github.com/tmitry/shorturl/internal/app/handlers"
 	"github.com/tmitry/shorturl/internal/app/repositories"
@@ -18,10 +19,18 @@ func NewRouter() http.Handler {
 	rep := repositories.NewMemoryRepository()
 
 	shortenerHandler := handlers.NewShortenerHandler(rep)
-	router.Post("/", shortenerHandler.ServeHTTP)
+	shortenerAPIHandler := handlers.NewShortenerAPIHandler(rep)
 
-	redirectHandler := handlers.NewRedirectHandler(rep)
-	router.Get(fmt.Sprintf("/{%s:%s}", handlers.ParameterNameUID, config.PatternUID), redirectHandler.ServeHTTP)
+	router.Route("/", func(r chi.Router) {
+		r.Use(middleware.AllowContentType(handlers.ContentTypeText))
+		r.Post("/", shortenerHandler.Shorten)
+		r.Get(fmt.Sprintf("/{%s:%s}", handlers.ParameterNameUID, config.PatternUID), shortenerHandler.Redirect)
+	})
+
+	router.Route("/api", func(r chi.Router) {
+		r.Use(middleware.AllowContentType(handlers.ContentTypeJSON))
+		r.Post("/shorten", shortenerAPIHandler.Shorten)
+	})
 
 	return router
 }

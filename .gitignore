@@ -24,3 +24,9 @@ vendor/
 
 # OS files
 .DS_Store
+
+# Script for running test
+test.sh
+
+# GolangCI-Lint config
+.golangci.yml
