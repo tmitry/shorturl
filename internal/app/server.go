@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/tmitry/shorturl/internal/app/config"
 	"github.com/tmitry/shorturl/internal/app/handlers"
+	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
 
@@ -24,7 +25,7 @@ func NewRouter() http.Handler {
 	router.Route("/", func(r chi.Router) {
 		r.Use(middleware.AllowContentType(handlers.ContentTypeText))
 		r.Post("/", shortenerHandler.Shorten)
-		r.Get(fmt.Sprintf("/{%s:%s}", handlers.ParameterNameUID, config.PatternUID), shortenerHandler.Redirect)
+		r.Get(fmt.Sprintf("/{%s:%s}", handlers.ParameterNameUID, models.GetPatternUID()), shortenerHandler.Redirect)
 	})
 
 	router.Route("/api", func(r chi.Router) {
@@ -37,9 +38,9 @@ func NewRouter() http.Handler {
 
 func NewServer(router http.Handler) *http.Server {
 	server := &http.Server{
-		Addr:              config.DefaultAddr,
+		Addr:              config.ServerCfg.Address,
 		Handler:           router,
-		ReadHeaderTimeout: config.ServerReadHeaderTimeout * time.Second,
+		ReadHeaderTimeout: time.Duration(config.ServerCfg.ReadHeaderTimeout) * time.Second,
 	}
 
 	return server

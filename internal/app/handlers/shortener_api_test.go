@@ -73,7 +73,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodPost, config.DefaultAddr, strings.NewReader(testCase.json))
+			request := httptest.NewRequest(http.MethodPost, config.ServerCfg.Address, strings.NewReader(testCase.json))
 			request.Header.Set("Content-Type", ContentTypeJSON)
 
 			recorder := httptest.NewRecorder()

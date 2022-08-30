@@ -3,6 +3,7 @@ module github.com/tmitry/shorturl
 go 1.18
 
 require (
+	github.com/caarlos0/env/v6 v6.10.0
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/speps/go-hashids/v2 v2.0.1
