@@ -34,18 +34,20 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	err = request.Body.Close()
-	if err != nil {
-		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		log.Println(err.Error())
-	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			log.Println(err.Error())
+		}
+	}(request.Body)
 
 	url := models.URL(body)
 
 	if !url.IsValid() {
 		http.Error(
 			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectURL),
+			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectURL),
 			http.StatusBadRequest,
 		)
 
@@ -81,7 +83,7 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, r *http.Request) 
 	if !isValid {
 		http.Error(
 			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectUID),
+			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectUID),
 			http.StatusBadRequest,
 		)
 
@@ -92,7 +94,7 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, r *http.Request) 
 	if shortURL == nil {
 		http.Error(
 			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageURLNotFound),
+			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageURLNotFound),
 			http.StatusBadRequest,
 		)
 

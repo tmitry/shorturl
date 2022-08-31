@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tmitry/shorturl/internal/app/config"
+	"github.com/tmitry/shorturl/internal/app/handlers"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
@@ -21,7 +22,7 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 	t.Parallel()
 
 	rep := repositories.NewMemoryRepository()
-	handler := NewShortenerHandler(rep)
+	handler := handlers.NewShortenerHandler(rep)
 
 	type want struct {
 		contentType string
@@ -38,16 +39,16 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 			name: "bad URL",
 			url:  "bad_url",
 			want: want{
-				contentType: ContentTypeText,
+				contentType: handlers.ContentTypeText,
 				statusCode:  http.StatusBadRequest,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectURL),
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectURL),
 			},
 		},
 		{
 			name: "correct URL",
 			url:  "https://example.com/",
 			want: want{
-				contentType: ContentTypeText,
+				contentType: handlers.ContentTypeText,
 				statusCode:  http.StatusCreated,
 				content:     "",
 			},
@@ -66,7 +67,7 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 			result := recorder.Result()
 
 			assert.Equal(t, testCase.want.statusCode, result.StatusCode)
-			assert.Equal(t, testCase.want.contentType, GetContentType(result))
+			assert.Equal(t, testCase.want.contentType, handlers.GetContentType(result))
 
 			content, err := ioutil.ReadAll(result.Body)
 			require.NoError(t, err)
@@ -84,7 +85,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 	t.Parallel()
 
 	rep := repositories.NewMemoryRepository()
-	handler := NewShortenerHandler(rep)
+	handler := handlers.NewShortenerHandler(rep)
 
 	id := rep.ReserveID()
 	url := models.URL("https://example.com/")
@@ -108,8 +109,8 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 			request: map[string]string{},
 			want: want{
 				statusCode:  http.StatusBadRequest,
-				contentType: ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectUID),
+				contentType: handlers.ContentTypeText,
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
 				location:    "",
 			},
 		},
@@ -118,8 +119,8 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 			request: map[string]string{"u_id": "gIJsL"},
 			want: want{
 				statusCode:  http.StatusBadRequest,
-				contentType: ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectUID),
+				contentType: handlers.ContentTypeText,
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
 				location:    "",
 			},
 		},
@@ -128,47 +129,47 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 			request: map[string]string{"uid": ""},
 			want: want{
 				statusCode:  http.StatusBadRequest,
-				contentType: ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectUID),
+				contentType: handlers.ContentTypeText,
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
 				location:    "",
 			},
 		},
 		{
 			name:    "UID has few characters",
-			request: map[string]string{ParameterNameUID: "asd"},
+			request: map[string]string{handlers.ParameterNameUID: "asd"},
 			want: want{
 				statusCode:  http.StatusBadRequest,
-				contentType: ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectUID),
+				contentType: handlers.ContentTypeText,
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
 				location:    "",
 			},
 		},
 		{
 			name:    "UID has invalid characters",
-			request: map[string]string{ParameterNameUID: "a#s-d!a"},
+			request: map[string]string{handlers.ParameterNameUID: "a#s-d!a"},
 			want: want{
 				statusCode:  http.StatusBadRequest,
-				contentType: ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectUID),
+				contentType: handlers.ContentTypeText,
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
 				location:    "",
 			},
 		},
 		{
 			name:    "UID not found",
-			request: map[string]string{ParameterNameUID: "AJsGF"},
+			request: map[string]string{handlers.ParameterNameUID: "AJsGF"},
 			want: want{
 				statusCode:  http.StatusBadRequest,
-				contentType: ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageURLNotFound),
+				contentType: handlers.ContentTypeText,
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageURLNotFound),
 				location:    "",
 			},
 		},
 		{
 			name:    "correct UID",
-			request: map[string]string{ParameterNameUID: shortURL.UID.String()},
+			request: map[string]string{handlers.ParameterNameUID: shortURL.UID.String()},
 			want: want{
 				statusCode:  http.StatusTemporaryRedirect,
-				contentType: ContentTypeText,
+				contentType: handlers.ContentTypeText,
 				content:     "",
 				location:    shortURL.URL.String(),
 			},
@@ -181,7 +182,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 			t.Parallel()
 
 			request := httptest.NewRequest(http.MethodGet, config.ServerCfg.Address, nil)
-			request.Header.Set("Content-Type", ContentTypeText)
+			request.Header.Set("Content-Type", handlers.ContentTypeText)
 
 			routeCtx := chi.NewRouteContext()
 			for param, value := range testCase.request {
@@ -195,7 +196,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 			result := recorder.Result()
 
 			assert.Equal(t, testCase.want.statusCode, result.StatusCode)
-			assert.Equal(t, testCase.want.contentType, GetContentType(result))
+			assert.Equal(t, testCase.want.contentType, handlers.GetContentType(result))
 			assert.Equal(t, testCase.want.location, result.Header.Get("Location"))
 
 			content, err := ioutil.ReadAll(result.Body)
@@ -206,13 +207,4 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 			assert.Equal(t, testCase.want.content, strings.TrimSuffix(string(content), "\n"))
 		})
 	}
-}
-
-func GetContentType(r *http.Response) string {
-	s := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type")))
-	if i := strings.Index(s, ";"); i > -1 {
-		s = s[0:i]
-	}
-
-	return s
 }

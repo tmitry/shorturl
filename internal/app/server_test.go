@@ -1,4 +1,4 @@
-package app
+package app_test
 
 import (
 	"net/http"
@@ -8,6 +8,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tmitry/shorturl/internal/app"
 	"github.com/tmitry/shorturl/internal/app/handlers"
 )
 
@@ -107,7 +108,7 @@ func TestRouter(t *testing.T) {
 		},
 	}
 
-	router := NewRouter()
+	router := app.NewRouter()
 	testServer := httptest.NewServer(router)
 
 	t.Cleanup(func() {

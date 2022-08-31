@@ -12,22 +12,22 @@ import (
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
 
-type requestJSON struct {
+type shortenRequestJSON struct {
 	URL models.URL `json:"url"`
 }
 
-func NewRequestJSON() *requestJSON {
-	return &requestJSON{
+func NewShortenRequestJSON() *shortenRequestJSON {
+	return &shortenRequestJSON{
 		URL: "",
 	}
 }
 
-type responseJSON struct {
+type ShortenResponseJSON struct {
 	Result models.URL `json:"result"`
 }
 
-func NewResponseJSON(url models.URL) *responseJSON {
-	return &responseJSON{
+func NewShortenResponseJSON(url models.URL) *ShortenResponseJSON {
+	return &ShortenResponseJSON{
 		Result: url,
 	}
 }
@@ -51,11 +51,11 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 		}
 	}(request.Body)
 
-	requestJSON := NewRequestJSON()
+	requestJSON := NewShortenRequestJSON()
 	if err := json.NewDecoder(request.Body).Decode(requestJSON); err != nil {
 		http.Error(
 			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectJSON),
+			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectJSON),
 			http.StatusBadRequest,
 		)
 
@@ -65,7 +65,7 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 	if !requestJSON.URL.IsValid() {
 		http.Error(
 			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectURL),
+			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectURL),
 			http.StatusBadRequest,
 		)
 
@@ -80,7 +80,7 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 	writer.Header().Set("Content-Type", ContentTypeJSON)
 	writer.WriteHeader(http.StatusCreated)
 
-	responseJSON := NewResponseJSON(shortURL.GetShortURL())
+	responseJSON := NewShortenResponseJSON(shortURL.GetShortURL())
 
 	var buf bytes.Buffer
 	jsonEncoder := json.NewEncoder(&buf)
