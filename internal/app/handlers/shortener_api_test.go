@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"fmt"
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tmitry/shorturl/internal/app/config"
+	"github.com/tmitry/shorturl/internal/app/handlers"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
 
@@ -18,7 +19,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 	t.Parallel()
 
 	rep := repositories.NewMemoryRepository()
-	handler := NewShortenerAPIHandler(rep)
+	handler := handlers.NewShortenerAPIHandler(rep)
 
 	type want struct {
 		contentType string
@@ -35,34 +36,34 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			name: "bad JSON",
 			json: "bad_json",
 			want: want{
-				contentType: ContentTypeText,
+				contentType: handlers.ContentTypeText,
 				statusCode:  http.StatusBadRequest,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectJSON),
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectJSON),
 			},
 		},
 		{
 			name: "bad JSON format",
 			json: `{"ur_l":"https://example.com/"}`,
 			want: want{
-				contentType: ContentTypeText,
+				contentType: handlers.ContentTypeText,
 				statusCode:  http.StatusBadRequest,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectURL),
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectURL),
 			},
 		},
 		{
 			name: "bad URL",
 			json: `{"url":"bad_url"}`,
 			want: want{
-				contentType: ContentTypeText,
+				contentType: handlers.ContentTypeText,
 				statusCode:  http.StatusBadRequest,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), messageIncorrectURL),
+				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectURL),
 			},
 		},
 		{
 			name: "correct URL",
 			json: `{"url":"https://example.com/"}`,
 			want: want{
-				contentType: ContentTypeJSON,
+				contentType: handlers.ContentTypeJSON,
 				statusCode:  http.StatusCreated,
 				content:     "",
 			},
@@ -74,7 +75,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			t.Parallel()
 
 			request := httptest.NewRequest(http.MethodPost, config.ServerCfg.Address, strings.NewReader(testCase.json))
-			request.Header.Set("Content-Type", ContentTypeJSON)
+			request.Header.Set("Content-Type", handlers.ContentTypeJSON)
 
 			recorder := httptest.NewRecorder()
 
@@ -82,7 +83,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			result := recorder.Result()
 
 			assert.Equal(t, testCase.want.statusCode, result.StatusCode)
-			assert.Equal(t, testCase.want.contentType, GetContentType(result))
+			assert.Equal(t, testCase.want.contentType, handlers.GetContentType(result))
 
 			content, err := ioutil.ReadAll(result.Body)
 			require.NoError(t, err)

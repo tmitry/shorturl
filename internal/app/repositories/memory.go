@@ -8,14 +8,14 @@ import (
 
 type MemoryRepository struct {
 	mu        sync.Mutex
-	shortURLs map[models.UID]models.ShortURL
+	shortURLs map[models.UID]*models.ShortURL
 	lastID    int
 }
 
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
 		mu:        sync.Mutex{},
-		shortURLs: map[models.UID]models.ShortURL{},
+		shortURLs: map[models.UID]*models.ShortURL{},
 		lastID:    0,
 	}
 }
@@ -34,9 +34,9 @@ func (m *MemoryRepository) Find(uid models.UID) *models.ShortURL {
 		return nil
 	}
 
-	return &shortURL
+	return shortURL
 }
 
 func (m *MemoryRepository) Save(shortURL *models.ShortURL) {
-	m.shortURLs[shortURL.UID] = *shortURL
+	m.shortURLs[shortURL.UID] = shortURL
 }

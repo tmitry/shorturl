@@ -42,7 +42,7 @@ func GetServerConfig() *ServerConfig {
 
 	envServerCfg := NewServerConfig("", "", 0)
 	if err := env.Parse(envServerCfg); err != nil {
-		log.Fatal(err)
+		log.Panic(err)
 	}
 
 	priorityConfigs := []*ServerConfig{envServerCfg, defaultServerCfg}

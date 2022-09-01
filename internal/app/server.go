@@ -17,7 +17,13 @@ import (
 func NewRouter() http.Handler {
 	router := chi.NewRouter()
 
-	rep := repositories.NewMemoryRepository()
+	var rep repositories.Repository
+
+	if config.AppCfg.FileStoragePath != "" {
+		rep = repositories.NewFileRepository()
+	} else {
+		rep = repositories.NewMemoryRepository()
+	}
 
 	shortenerHandler := handlers.NewShortenerHandler(rep)
 	shortenerAPIHandler := handlers.NewShortenerAPIHandler(rep)
