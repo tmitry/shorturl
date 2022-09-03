@@ -2,8 +2,10 @@ package config
 
 import (
 	"log"
+	"os"
 
 	"github.com/caarlos0/env/v6"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -14,18 +16,18 @@ const (
 
 /*
 ServerConfig uses the following precedence order. Each item takes precedence over the item below it:
-- Flag todo
+- Flag
 - Env
-- Config todo
+- YAML
 - Default.
 */
 type ServerConfig struct {
-	Address           string `env:"SERVER_ADDRESS"`
-	BaseURL           string `env:"BASE_URL"`
-	ReadHeaderTimeout int    `env:"SERVER_READ_HEADER_TIMEOUT"`
+	Address           string `env:"SERVER_ADDRESS" yaml:"address"`
+	BaseURL           string `env:"BASE_URL" yaml:"base_url"`
+	ReadHeaderTimeout int    `env:"SERVER_READ_HEADER_TIMEOUT" yaml:"read_header_timeout"`
 }
 
-var ServerCfg = GetServerConfig()
+var ServerCfg = NewServerConfig(address, baseURL, readHeaderTimeout)
 
 func NewServerConfig(address, baseURL string, readHeaderTimeout int) *ServerConfig {
 	return &ServerConfig{
@@ -35,19 +37,36 @@ func NewServerConfig(address, baseURL string, readHeaderTimeout int) *ServerConf
 	}
 }
 
-func GetServerConfig() *ServerConfig {
+func GetServerConfig(flagConfig *FlagConfig) *ServerConfig {
 	serverCfg := NewServerConfig("", "", 0)
 
-	defaultServerCfg := NewServerConfig(address, baseURL, readHeaderTimeout)
+	defaultServerCfg := ServerCfg
 
 	envServerCfg := NewServerConfig("", "", 0)
 	if err := env.Parse(envServerCfg); err != nil {
 		log.Panic(err)
 	}
 
-	priorityConfigs := []*ServerConfig{envServerCfg, defaultServerCfg}
+	yamlServerCfg := NewServerConfig("", "", 0)
 
-	initConfig(serverCfg, priorityConfigs)
+	if flagConfig.ServerConfigPath != "" {
+		file, err := os.Open(flagConfig.ServerConfigPath)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		decoder := yaml.NewDecoder(file)
+
+		if err = decoder.Decode(yamlServerCfg); err != nil {
+			log.Panic(err)
+		}
+	}
+
+	flagServerCfg := NewServerConfig(flagConfig.Address, flagConfig.BaseURL, 0)
+
+	priorityConfigs := []*ServerConfig{flagServerCfg, envServerCfg, yamlServerCfg, defaultServerCfg}
+
+	buildConfig(serverCfg, priorityConfigs)
 
 	return serverCfg
 }
