@@ -43,31 +43,33 @@ func NewShortenerAPIHandler(rep repositories.Repository) *ShortenerAPIHandler {
 }
 
 func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.Request) {
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+	reader, err := getRequestReader(request)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
+
+	defer func(reader io.ReadCloser) {
+		err := reader.Close()
 		if err != nil {
 			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			log.Println(err.Error())
 		}
-	}(request.Body)
+	}(reader)
 
 	requestJSON := NewShortenRequestJSON()
-	if err := json.NewDecoder(request.Body).Decode(requestJSON); err != nil {
-		http.Error(
-			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectJSON),
-			http.StatusBadRequest,
-		)
+	if err := json.NewDecoder(reader).Decode(requestJSON); err != nil {
+		http.Error(writer, fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectJSON),
+			http.StatusBadRequest)
 
 		return
 	}
 
 	if !requestJSON.URL.IsValid() {
-		http.Error(
-			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectURL),
-			http.StatusBadRequest,
-		)
+		http.Error(writer, fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectURL),
+			http.StatusBadRequest)
 
 		return
 	}
@@ -86,15 +88,19 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 	jsonEncoder := json.NewEncoder(&buf)
 	jsonEncoder.SetEscapeHTML(false)
 
-	err := jsonEncoder.Encode(responseJSON)
+	err = jsonEncoder.Encode(responseJSON)
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
+
+		return
 	}
 
 	_, err = buf.WriteTo(writer)
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
+
+		return
 	}
 }

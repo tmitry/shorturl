@@ -78,8 +78,8 @@ func NewFileRepository() *FileRepository {
 
 func (f *FileRepository) ReserveID() int {
 	f.mu.Lock()
-	f.lastID++
 	defer f.mu.Unlock()
+	f.lastID++
 
 	return f.lastID
 }
@@ -94,6 +94,9 @@ func (f *FileRepository) Find(uid models.UID) *models.ShortURL {
 }
 
 func (f *FileRepository) Save(shortURL *models.ShortURL) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	err := f.encoder.Encode(shortURL)
 	if err != nil {
 		log.Panic(err)

@@ -22,8 +22,8 @@ func NewMemoryRepository() *MemoryRepository {
 
 func (m *MemoryRepository) ReserveID() int {
 	m.mu.Lock()
-	m.lastID++
 	defer m.mu.Unlock()
+	m.lastID++
 
 	return m.lastID
 }
@@ -38,5 +38,7 @@ func (m *MemoryRepository) Find(uid models.UID) *models.ShortURL {
 }
 
 func (m *MemoryRepository) Save(shortURL *models.ShortURL) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.shortURLs[shortURL.UID] = shortURL
 }

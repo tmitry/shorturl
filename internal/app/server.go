@@ -16,6 +16,7 @@ import (
 
 func NewRouter() http.Handler {
 	router := chi.NewRouter()
+	router.Use(middleware.Compress(config.ServerCfg.CompressionLevel))
 
 	var rep repositories.Repository
 
@@ -29,13 +30,15 @@ func NewRouter() http.Handler {
 	shortenerAPIHandler := handlers.NewShortenerAPIHandler(rep)
 
 	router.Route("/", func(r chi.Router) {
-		r.Use(middleware.AllowContentType(handlers.ContentTypeText))
+		r.Use(middleware.AllowContentType(handlers.ContentTypeText, handlers.ContentTypeGZIP))
+		r.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
 		r.Post("/", shortenerHandler.Shorten)
 		r.Get(fmt.Sprintf("/{%s:%s}", handlers.ParameterNameUID, models.GetPatternUID()), shortenerHandler.Redirect)
 	})
 
 	router.Route("/api", func(r chi.Router) {
-		r.Use(middleware.AllowContentType(handlers.ContentTypeJSON))
+		r.Use(middleware.AllowContentType(handlers.ContentTypeJSON, handlers.ContentTypeGZIP))
+		r.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
 		r.Post("/shorten", shortenerAPIHandler.Shorten)
 	})
 

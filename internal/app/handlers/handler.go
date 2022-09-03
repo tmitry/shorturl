@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"compress/gzip"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -13,6 +16,9 @@ const (
 
 	ContentTypeText = "text/plain"
 	ContentTypeJSON = "application/json"
+	ContentTypeGZIP = "application/x-gzip"
+
+	ContentEncodingGZIP = "gzip"
 )
 
 func GetContentType(r *http.Response) string {
@@ -22,4 +28,17 @@ func GetContentType(r *http.Response) string {
 	}
 
 	return s
+}
+
+func getRequestReader(request *http.Request) (io.ReadCloser, error) {
+	if request.Header.Get("Content-Encoding") == ContentEncodingGZIP {
+		gzipReader, err := gzip.NewReader(request.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+		}
+
+		return gzipReader, nil
+	}
+
+	return request.Body, nil
 }

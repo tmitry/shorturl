@@ -26,7 +26,7 @@ func NewShortenerHandler(rep repositories.Repository) *ShortenerHandler {
 }
 
 func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Request) {
-	body, err := io.ReadAll(request.Body)
+	reader, err := getRequestReader(request)
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
@@ -34,13 +34,21 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+	defer func(reader io.ReadCloser) {
+		err := reader.Close()
 		if err != nil {
 			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			log.Println(err.Error())
 		}
-	}(request.Body)
+	}(reader)
+
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
 
 	url := models.URL(body)
 
@@ -66,6 +74,8 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
+
+		return
 	}
 }
 
