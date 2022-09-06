@@ -17,10 +17,10 @@ func InitConfigs() {
 	ServerCfg = GetServerConfig(flagConfig)
 }
 
-func buildConfig[C Config](config *C, priorityConfigs []*C) {
+func buildConfig[C Config](config *C, precedenceConfigs []*C) {
 	configValue := reflect.ValueOf(config).Elem()
 
-	for _, priorityConfig := range priorityConfigs {
+	for _, priorityConfig := range precedenceConfigs {
 		priorityConfigValue := reflect.ValueOf(priorityConfig).Elem()
 
 		for index := 0; index < configValue.NumField(); index++ {

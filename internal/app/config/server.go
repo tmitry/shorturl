@@ -12,6 +12,7 @@ const (
 	address           = "localhost:8080"
 	baseURL           = "http://localhost:8080"
 	readHeaderTimeout = 2
+	compressionLevel  = 5
 )
 
 /*
@@ -25,29 +26,31 @@ type ServerConfig struct {
 	Address           string `env:"SERVER_ADDRESS" yaml:"address"`
 	BaseURL           string `env:"BASE_URL" yaml:"base_url"`
 	ReadHeaderTimeout int    `env:"SERVER_READ_HEADER_TIMEOUT" yaml:"read_header_timeout"`
+	CompressionLevel  int    `env:"SERVER_COMPRESSION_LEVEL" yaml:"compression_level"`
 }
 
-var ServerCfg = NewServerConfig(address, baseURL, readHeaderTimeout)
+var ServerCfg = NewServerConfig(address, baseURL, readHeaderTimeout, compressionLevel)
 
-func NewServerConfig(address, baseURL string, readHeaderTimeout int) *ServerConfig {
+func NewServerConfig(address, baseURL string, readHeaderTimeout, compressionLevel int) *ServerConfig {
 	return &ServerConfig{
 		Address:           address,
 		BaseURL:           baseURL,
 		ReadHeaderTimeout: readHeaderTimeout,
+		CompressionLevel:  compressionLevel,
 	}
 }
 
 func GetServerConfig(flagConfig *FlagConfig) *ServerConfig {
-	serverCfg := NewServerConfig("", "", 0)
+	serverCfg := NewServerConfig("", "", 0, 0)
 
 	defaultServerCfg := ServerCfg
 
-	envServerCfg := NewServerConfig("", "", 0)
+	envServerCfg := NewServerConfig("", "", 0, 0)
 	if err := env.Parse(envServerCfg); err != nil {
 		log.Panic(err)
 	}
 
-	yamlServerCfg := NewServerConfig("", "", 0)
+	yamlServerCfg := NewServerConfig("", "", 0, 0)
 
 	if flagConfig.ServerConfigPath != "" {
 		file, err := os.Open(flagConfig.ServerConfigPath)
@@ -62,7 +65,7 @@ func GetServerConfig(flagConfig *FlagConfig) *ServerConfig {
 		}
 	}
 
-	flagServerCfg := NewServerConfig(flagConfig.Address, flagConfig.BaseURL, 0)
+	flagServerCfg := NewServerConfig(flagConfig.Address, flagConfig.BaseURL, 0, 0)
 
 	priorityConfigs := []*ServerConfig{flagServerCfg, envServerCfg, yamlServerCfg, defaultServerCfg}
 
