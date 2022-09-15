@@ -109,6 +109,13 @@ func TestRouter(t *testing.T) {
 			statusCode:  http.StatusUnsupportedMediaType,
 			contentType: handlers.ContentTypeJSON,
 		},
+		{
+			name:        "correct GET /api/user/urls",
+			method:      resty.MethodGet,
+			path:        "/api/user/urls",
+			statusCode:  http.StatusNoContent,
+			contentType: handlers.ContentTypeText,
+		},
 	}
 
 	router := app.NewRouter()

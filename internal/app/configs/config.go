@@ -1,4 +1,4 @@
-package config
+package configs
 
 import (
 	"reflect"
@@ -41,6 +41,7 @@ type FlagConfig struct {
 	FileStoragePath  string
 	ServerConfigPath string
 	AppConfigPath    string
+	JWTSignatureKey  string
 }
 
 func NewFlagConfig() *FlagConfig {
@@ -50,6 +51,7 @@ func NewFlagConfig() *FlagConfig {
 		FileStoragePath:  "",
 		ServerConfigPath: "",
 		AppConfigPath:    "",
+		JWTSignatureKey:  "",
 	}
 
 	flag.StringVarP(&flagConfig.Address, "server_address", "a", "", "Server address")
@@ -57,6 +59,7 @@ func NewFlagConfig() *FlagConfig {
 	flag.StringVarP(&flagConfig.FileStoragePath, "file_path", "f", "", "File storage path")
 	flag.StringVar(&flagConfig.ServerConfigPath, "server_config_path", "", "Server config path")
 	flag.StringVar(&flagConfig.AppConfigPath, "app_config_path", "", "App config path")
+	flag.StringVar(&flagConfig.JWTSignatureKey, "jwt_signature_key", "", "JWT Signature key")
 	flag.Parse()
 
 	return flagConfig

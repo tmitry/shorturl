@@ -2,10 +2,10 @@ package main
 
 import (
 	"github.com/tmitry/shorturl/internal/app"
-	"github.com/tmitry/shorturl/internal/app/config"
+	"github.com/tmitry/shorturl/internal/app/configs"
 )
 
 func main() {
-	config.InitConfigs()
+	configs.InitConfigs()
 	app.StartServer()
 }

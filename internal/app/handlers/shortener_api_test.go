@@ -1,6 +1,8 @@
 package handlers_test
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -8,18 +10,25 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tmitry/shorturl/internal/app/config"
+	"github.com/tmitry/shorturl/internal/app/configs"
 	"github.com/tmitry/shorturl/internal/app/handlers"
+	"github.com/tmitry/shorturl/internal/app/middlewares"
+	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
 
 func TestShortenerAPIHandler_Shorten(t *testing.T) {
 	t.Parallel()
 
+	const (
+		ContextKeyUserID middlewares.ContextKey = "userID"
+	)
+
 	rep := repositories.NewMemoryRepository()
-	handler := handlers.NewShortenerAPIHandler(rep)
+	handler := handlers.NewShortenerAPIHandler(rep, ContextKeyUserID)
 
 	type want struct {
 		contentType string
@@ -74,8 +83,9 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodPost, config.ServerCfg.Address, strings.NewReader(testCase.json))
+			request := httptest.NewRequest(http.MethodPost, configs.ServerCfg.Address, strings.NewReader(testCase.json))
 			request.Header.Set("Content-Type", handlers.ContentTypeJSON)
+			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, uuid.New()))
 
 			recorder := httptest.NewRecorder()
 
@@ -91,6 +101,86 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			require.NoError(t, err)
 
 			if result.StatusCode != http.StatusCreated {
+				assert.Equal(t, testCase.want.content, strings.TrimSuffix(string(content), "\n"))
+			}
+		})
+	}
+}
+
+func TestShortenerAPIHandler_UserUrls(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ContextKeyUserID middlewares.ContextKey = "userID"
+	)
+
+	rep := repositories.NewMemoryRepository()
+	handler := handlers.NewShortenerAPIHandler(rep, ContextKeyUserID)
+
+	id := rep.ReserveID()
+	url := models.URL("https://example.com/")
+	userID := uuid.New()
+	shortURL := models.NewShortURL(id, url, models.GenerateUID(id), userID)
+	rep.Save(shortURL)
+
+	content, err := json.Marshal(handlers.NewUserUrlsResponseJSON([]*models.ShortURL{shortURL}))
+	assert.NoError(t, err)
+
+	type want struct {
+		contentType string
+		statusCode  int
+		content     string
+	}
+
+	tests := []struct {
+		name   string
+		userID uuid.UUID
+		want   want
+	}{
+		{
+			name:   "urls not exist",
+			userID: uuid.New(),
+			want: want{
+				contentType: handlers.ContentTypeText,
+				statusCode:  http.StatusNoContent,
+				content:     http.StatusText(http.StatusNoContent),
+			},
+		},
+		{
+			name:   "urls exist",
+			userID: userID,
+			want: want{
+				contentType: handlers.ContentTypeJSON,
+				statusCode:  http.StatusOK,
+				content:     string(content),
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			request := httptest.NewRequest(http.MethodPost, configs.ServerCfg.Address, nil)
+			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, testCase.userID))
+
+			recorder := httptest.NewRecorder()
+
+			handler.UserUrls(recorder, request)
+			result := recorder.Result()
+
+			assert.Equal(t, testCase.want.statusCode, result.StatusCode)
+			assert.Equal(t, testCase.want.contentType, handlers.GetContentType(result))
+
+			content, err := ioutil.ReadAll(result.Body)
+			require.NoError(t, err)
+			err = result.Body.Close()
+			require.NoError(t, err)
+
+			if testCase.want.contentType == handlers.ContentTypeJSON {
+				assert.JSONEq(t, testCase.want.content, string(content))
+			} else {
 				assert.Equal(t, testCase.want.content, strings.TrimSuffix(string(content), "\n"))
 			}
 		})
