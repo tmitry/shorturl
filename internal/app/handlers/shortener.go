@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/tmitry/shorturl/internal/app/middlewares"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
@@ -16,16 +18,26 @@ const (
 )
 
 type ShortenerHandler struct {
-	Rep repositories.Repository
+	Rep              repositories.Repository
+	ContextKeyUserID middlewares.ContextKey
 }
 
-func NewShortenerHandler(rep repositories.Repository) *ShortenerHandler {
+func NewShortenerHandler(rep repositories.Repository, contextKeyUserID middlewares.ContextKey) *ShortenerHandler {
 	return &ShortenerHandler{
-		Rep: rep,
+		Rep:              rep,
+		ContextKeyUserID: contextKeyUserID,
 	}
 }
 
 func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Request) {
+	userID, ok := request.Context().Value(h.ContextKeyUserID).(uuid.UUID)
+	if !ok {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(MessageIncorrectUserID)
+
+		return
+	}
+
 	reader, err := getRequestReader(request)
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -63,7 +75,7 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 	}
 
 	id := h.Rep.ReserveID()
-	shortURL := models.NewShortURL(id, url, models.GenerateUID(id))
+	shortURL := models.NewShortURL(id, url, models.GenerateUID(id), userID)
 
 	h.Rep.Save(shortURL)
 
@@ -79,8 +91,8 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 	}
 }
 
-func (h ShortenerHandler) Redirect(writer http.ResponseWriter, r *http.Request) {
-	uid := models.UID(chi.URLParam(r, ParameterNameUID))
+func (h ShortenerHandler) Redirect(writer http.ResponseWriter, request *http.Request) {
+	uid := models.UID(chi.URLParam(request, ParameterNameUID))
 
 	isValid, err := uid.IsValid()
 	if err != nil {
@@ -100,7 +112,7 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	shortURL := h.Rep.Find(uid)
+	shortURL := h.Rep.FindOneByUID(uid)
 	if shortURL == nil {
 		http.Error(
 			writer,

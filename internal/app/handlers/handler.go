@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	MessageIncorrectURL  = "incorrect URL"
-	MessageIncorrectUID  = "incorrect UID"
-	MessageURLNotFound   = "URL not found"
-	MessageIncorrectJSON = "incorrect JSON"
+	MessageIncorrectURL    = "incorrect URL"
+	MessageIncorrectUID    = "incorrect UID"
+	MessageURLNotFound     = "URL not found"
+	MessageIncorrectJSON   = "incorrect JSON"
+	MessageIncorrectUserID = "incorrect user ID"
 
 	ContentTypeText = "text/plain"
 	ContentTypeJSON = "application/json"

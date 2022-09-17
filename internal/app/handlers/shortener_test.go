@@ -10,10 +10,12 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tmitry/shorturl/internal/app/config"
+	"github.com/tmitry/shorturl/internal/app/configs"
 	"github.com/tmitry/shorturl/internal/app/handlers"
+	"github.com/tmitry/shorturl/internal/app/middlewares"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
@@ -21,8 +23,12 @@ import (
 func TestShortenerHandler_Shorten(t *testing.T) {
 	t.Parallel()
 
+	const (
+		ContextKeyUserID middlewares.ContextKey = "userID"
+	)
+
 	rep := repositories.NewMemoryRepository()
-	handler := handlers.NewShortenerHandler(rep)
+	handler := handlers.NewShortenerHandler(rep, ContextKeyUserID)
 
 	type want struct {
 		contentType string
@@ -59,7 +65,8 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodPost, config.ServerCfg.Address, strings.NewReader(testCase.url))
+			request := httptest.NewRequest(http.MethodPost, configs.ServerCfg.Address, strings.NewReader(testCase.url))
+			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, uuid.New()))
 
 			recorder := httptest.NewRecorder()
 
@@ -84,12 +91,16 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 func TestShortenerHandler_Redirect(t *testing.T) {
 	t.Parallel()
 
+	const (
+		ContextKeyUserID middlewares.ContextKey = "userID"
+	)
+
 	rep := repositories.NewMemoryRepository()
-	handler := handlers.NewShortenerHandler(rep)
+	handler := handlers.NewShortenerHandler(rep, ContextKeyUserID)
 
 	id := rep.ReserveID()
 	url := models.URL("https://example.com/")
-	shortURL := models.NewShortURL(id, url, models.GenerateUID(id))
+	shortURL := models.NewShortURL(id, url, models.GenerateUID(id), uuid.New())
 	rep.Save(shortURL)
 
 	type want struct {
@@ -181,7 +192,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodGet, config.ServerCfg.Address, nil)
+			request := httptest.NewRequest(http.MethodGet, configs.ServerCfg.Address, nil)
 			request.Header.Set("Content-Type", handlers.ContentTypeText)
 
 			routeCtx := chi.NewRouteContext()

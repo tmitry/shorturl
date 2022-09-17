@@ -1,9 +1,13 @@
 package repositories
 
-import "github.com/tmitry/shorturl/internal/app/models"
+import (
+	"github.com/google/uuid"
+	"github.com/tmitry/shorturl/internal/app/models"
+)
 
 type Repository interface {
 	ReserveID() int
-	Find(uid models.UID) *models.ShortURL
+	FindOneByUID(uid models.UID) *models.ShortURL
+	FindAllByUserID(uuid uuid.UUID) []*models.ShortURL
 	Save(shortURL *models.ShortURL)
 }

@@ -8,26 +8,34 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/tmitry/shorturl/internal/app/config"
+	"github.com/tmitry/shorturl/internal/app/configs"
 	"github.com/tmitry/shorturl/internal/app/handlers"
+	"github.com/tmitry/shorturl/internal/app/middlewares"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
 )
 
+const (
+	ContextKeyUserID middlewares.ContextKey = "userID"
+
+	jwtCookieName = "jwt"
+)
+
 func NewRouter() http.Handler {
 	router := chi.NewRouter()
-	router.Use(middleware.Compress(config.ServerCfg.CompressionLevel))
+	router.Use(middleware.Compress(configs.ServerCfg.CompressionLevel))
+	router.Use(middlewares.JWTAuth(configs.AppCfg.JWTSignatureKey, jwtCookieName, ContextKeyUserID))
 
 	var rep repositories.Repository
 
-	if config.AppCfg.FileStoragePath != "" {
+	if configs.AppCfg.FileStoragePath != "" {
 		rep = repositories.NewFileRepository()
 	} else {
 		rep = repositories.NewMemoryRepository()
 	}
 
-	shortenerHandler := handlers.NewShortenerHandler(rep)
-	shortenerAPIHandler := handlers.NewShortenerAPIHandler(rep)
+	shortenerHandler := handlers.NewShortenerHandler(rep, ContextKeyUserID)
+	shortenerAPIHandler := handlers.NewShortenerAPIHandler(rep, ContextKeyUserID)
 
 	router.Route("/", func(r chi.Router) {
 		r.Use(middleware.AllowContentType(handlers.ContentTypeText, handlers.ContentTypeGZIP))
@@ -40,6 +48,7 @@ func NewRouter() http.Handler {
 		r.Use(middleware.AllowContentType(handlers.ContentTypeJSON, handlers.ContentTypeGZIP))
 		r.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
 		r.Post("/shorten", shortenerAPIHandler.Shorten)
+		r.Get("/user/urls", shortenerAPIHandler.UserUrls)
 	})
 
 	return router
@@ -47,9 +56,9 @@ func NewRouter() http.Handler {
 
 func NewServer(router http.Handler) *http.Server {
 	server := &http.Server{
-		Addr:              config.ServerCfg.Address,
+		Addr:              configs.ServerCfg.Address,
 		Handler:           router,
-		ReadHeaderTimeout: time.Duration(config.ServerCfg.ReadHeaderTimeout) * time.Second,
+		ReadHeaderTimeout: time.Duration(configs.ServerCfg.ReadHeaderTimeout) * time.Second,
 	}
 
 	return server
