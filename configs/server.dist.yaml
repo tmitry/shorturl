@@ -2,3 +2,4 @@ address: 'localhost:8080'
 base_url: 'http://localhost:8080'
 read_header_timeout: 2
 compression_level: 5
+jwt_signature_key: 'sRhs-tWB!Kq7RLCHYek6QFks'

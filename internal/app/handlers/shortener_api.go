@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/tmitry/shorturl/internal/app/configs"
 	"github.com/tmitry/shorturl/internal/app/middlewares"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
@@ -32,7 +33,7 @@ func NewShortenResponseJSON(url models.URL) interface{} {
 	return &response
 }
 
-func NewUserUrlsResponseJSON(userShortURLs []*models.ShortURL) interface{} {
+func NewUserUrlsResponseJSON(userShortURLs []*models.ShortURL, baseURL string) interface{} {
 	response := make([]struct {
 		ShortURL    models.URL `json:"short_url"`
 		OriginalURL models.URL `json:"original_url"`
@@ -42,19 +43,25 @@ func NewUserUrlsResponseJSON(userShortURLs []*models.ShortURL) interface{} {
 		response = append(response, struct {
 			ShortURL    models.URL `json:"short_url"`
 			OriginalURL models.URL `json:"original_url"`
-		}{ShortURL: userShortURL.GetShortURL(), OriginalURL: userShortURL.URL})
+		}{ShortURL: userShortURL.GetShortURL(baseURL), OriginalURL: userShortURL.URL})
 	}
 
 	return &response
 }
 
 type ShortenerAPIHandler struct {
+	Cfg              *configs.Config
 	Rep              repositories.Repository
 	ContextKeyUserID middlewares.ContextKey
 }
 
-func NewShortenerAPIHandler(rep repositories.Repository, contextKeyUserID middlewares.ContextKey) *ShortenerAPIHandler {
+func NewShortenerAPIHandler(
+	cfg *configs.Config,
+	rep repositories.Repository,
+	contextKeyUserID middlewares.ContextKey,
+) *ShortenerAPIHandler {
 	return &ShortenerAPIHandler{
+		Cfg:              cfg,
 		Rep:              rep,
 		ContextKeyUserID: contextKeyUserID,
 	}
@@ -101,14 +108,19 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 	}
 
 	id := h.Rep.ReserveID()
-	shortURL := models.NewShortURL(id, requestJSON.URL, models.GenerateUID(id), userID)
+	shortURL := models.NewShortURL(
+		id,
+		requestJSON.URL,
+		models.NewUID(id, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt),
+		userID,
+	)
 
 	h.Rep.Save(shortURL)
 
 	writer.Header().Set("Content-Type", ContentTypeJSON)
 	writer.WriteHeader(http.StatusCreated)
 
-	responseJSON := NewShortenResponseJSON(shortURL.GetShortURL())
+	responseJSON := NewShortenResponseJSON(shortURL.GetShortURL(h.Cfg.Server.BaseURL))
 
 	var buf bytes.Buffer
 	jsonEncoder := json.NewEncoder(&buf)
@@ -149,7 +161,7 @@ func (h ShortenerAPIHandler) UserUrls(writer http.ResponseWriter, request *http.
 
 	writer.Header().Set("Content-Type", ContentTypeJSON)
 
-	responseJSON := NewUserUrlsResponseJSON(userShortURLs)
+	responseJSON := NewUserUrlsResponseJSON(userShortURLs, h.Cfg.Server.BaseURL)
 
 	var buf bytes.Buffer
 	jsonEncoder := json.NewEncoder(&buf)

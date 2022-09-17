@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tmitry/shorturl/internal/app"
+	"github.com/tmitry/shorturl/internal/app/configs"
 	"github.com/tmitry/shorturl/internal/app/handlers"
 )
 
@@ -118,7 +119,8 @@ func TestRouter(t *testing.T) {
 		},
 	}
 
-	router := app.NewRouter()
+	cfg := configs.NewDefaultConfig()
+	router := app.NewRouter(cfg)
 	testServer := httptest.NewServer(router)
 
 	t.Cleanup(func() {
@@ -177,7 +179,8 @@ func TestAcceptEncoding(t *testing.T) {
 	body := "https://example.com/"
 	contentType := handlers.ContentTypeText
 
-	router := app.NewRouter()
+	cfg := configs.NewDefaultConfig()
+	router := app.NewRouter(cfg)
 	testServer := httptest.NewServer(router)
 
 	t.Cleanup(func() {

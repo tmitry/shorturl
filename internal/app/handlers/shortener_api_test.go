@@ -27,8 +27,9 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 		ContextKeyUserID middlewares.ContextKey = "userID"
 	)
 
+	cfg := configs.NewDefaultConfig()
 	rep := repositories.NewMemoryRepository()
-	handler := handlers.NewShortenerAPIHandler(rep, ContextKeyUserID)
+	handler := handlers.NewShortenerAPIHandler(cfg, rep, ContextKeyUserID)
 
 	type want struct {
 		contentType string
@@ -83,7 +84,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodPost, configs.ServerCfg.Address, strings.NewReader(testCase.json))
+			request := httptest.NewRequest(http.MethodPost, cfg.Server.Address, strings.NewReader(testCase.json))
 			request.Header.Set("Content-Type", handlers.ContentTypeJSON)
 			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, uuid.New()))
 
@@ -114,16 +115,17 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 		ContextKeyUserID middlewares.ContextKey = "userID"
 	)
 
+	cfg := configs.NewDefaultConfig()
 	rep := repositories.NewMemoryRepository()
-	handler := handlers.NewShortenerAPIHandler(rep, ContextKeyUserID)
+	handler := handlers.NewShortenerAPIHandler(cfg, rep, ContextKeyUserID)
 
 	id := rep.ReserveID()
 	url := models.URL("https://example.com/")
 	userID := uuid.New()
-	shortURL := models.NewShortURL(id, url, models.GenerateUID(id), userID)
+	shortURL := models.NewShortURL(id, url, models.NewUID(id, cfg.App.HashMinLength, cfg.App.HashSalt), userID)
 	rep.Save(shortURL)
 
-	content, err := json.Marshal(handlers.NewUserUrlsResponseJSON([]*models.ShortURL{shortURL}))
+	content, err := json.Marshal(handlers.NewUserUrlsResponseJSON([]*models.ShortURL{shortURL}, cfg.Server.BaseURL))
 	assert.NoError(t, err)
 
 	type want struct {
@@ -162,7 +164,7 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodPost, configs.ServerCfg.Address, nil)
+			request := httptest.NewRequest(http.MethodPost, cfg.Server.Address, nil)
 			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, testCase.userID))
 
 			recorder := httptest.NewRecorder()

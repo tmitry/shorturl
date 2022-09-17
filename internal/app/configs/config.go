@@ -6,18 +6,32 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-type Config interface {
+type ConfigInterface interface {
 	ServerConfig | AppConfig
 }
 
-func InitConfigs() {
-	flagConfig := NewFlagConfig()
-
-	AppCfg = GetAppConfig(flagConfig)
-	ServerCfg = GetServerConfig(flagConfig)
+type Config struct {
+	App    *AppConfig
+	Server *ServerConfig
 }
 
-func buildConfig[C Config](config *C, precedenceConfigs []*C) {
+func NewConfig() *Config {
+	flagConfig := NewFlagConfig()
+
+	return &Config{
+		App:    GetAppConfig(flagConfig),
+		Server: GetServerConfig(flagConfig),
+	}
+}
+
+func NewDefaultConfig() *Config {
+	return &Config{
+		App:    NewDefaultAppConfig(),
+		Server: NewDefaultServerConfig(),
+	}
+}
+
+func buildConfig[C ConfigInterface](config *C, precedenceConfigs []*C) {
 	configValue := reflect.ValueOf(config).Elem()
 
 	for _, priorityConfig := range precedenceConfigs {

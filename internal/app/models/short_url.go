@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/tmitry/shorturl/internal/app/configs"
 )
 
 type ShortURL struct {
@@ -23,6 +22,6 @@ func NewShortURL(id int, url URL, uid UID, userID uuid.UUID) *ShortURL {
 	}
 }
 
-func (s ShortURL) GetShortURL() URL {
-	return URL(fmt.Sprintf("%s/%s", configs.ServerCfg.BaseURL, s.UID.String()))
+func (s ShortURL) GetShortURL(baseURL string) URL {
+	return URL(fmt.Sprintf("%s/%s", baseURL, s.UID))
 }

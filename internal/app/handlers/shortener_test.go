@@ -27,8 +27,9 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 		ContextKeyUserID middlewares.ContextKey = "userID"
 	)
 
+	cfg := configs.NewDefaultConfig()
 	rep := repositories.NewMemoryRepository()
-	handler := handlers.NewShortenerHandler(rep, ContextKeyUserID)
+	handler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
 
 	type want struct {
 		contentType string
@@ -65,7 +66,7 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodPost, configs.ServerCfg.Address, strings.NewReader(testCase.url))
+			request := httptest.NewRequest(http.MethodPost, cfg.Server.Address, strings.NewReader(testCase.url))
 			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, uuid.New()))
 
 			recorder := httptest.NewRecorder()
@@ -95,12 +96,13 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		ContextKeyUserID middlewares.ContextKey = "userID"
 	)
 
+	cfg := configs.NewDefaultConfig()
 	rep := repositories.NewMemoryRepository()
-	handler := handlers.NewShortenerHandler(rep, ContextKeyUserID)
+	handler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
 
 	id := rep.ReserveID()
 	url := models.URL("https://example.com/")
-	shortURL := models.NewShortURL(id, url, models.GenerateUID(id), uuid.New())
+	shortURL := models.NewShortURL(id, url, models.NewUID(id, cfg.App.HashMinLength, cfg.App.HashSalt), uuid.New())
 	rep.Save(shortURL)
 
 	type want struct {
@@ -192,7 +194,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodGet, configs.ServerCfg.Address, nil)
+			request := httptest.NewRequest(http.MethodGet, cfg.Server.Address, nil)
 			request.Header.Set("Content-Type", handlers.ContentTypeText)
 
 			routeCtx := chi.NewRouteContext()
