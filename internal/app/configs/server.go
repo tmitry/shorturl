@@ -13,6 +13,7 @@ const (
 	baseURL           = "http://localhost:8080"
 	readHeaderTimeout = 2
 	compressionLevel  = 5
+	jwtSignatureKey   = "sRhs-tWB!Kq7RLCHYek6QFks"
 )
 
 /*
@@ -27,30 +28,34 @@ type ServerConfig struct {
 	BaseURL           string `env:"BASE_URL" yaml:"base_url"`
 	ReadHeaderTimeout int    `env:"SERVER_READ_HEADER_TIMEOUT" yaml:"read_header_timeout"`
 	CompressionLevel  int    `env:"SERVER_COMPRESSION_LEVEL" yaml:"compression_level"`
+	JWTSignatureKey   string `env:"JWT_SIGNATURE_KEY" yaml:"jwt_signature_key"`
 }
 
-var ServerCfg = NewServerConfig(address, baseURL, readHeaderTimeout, compressionLevel)
-
-func NewServerConfig(address, baseURL string, readHeaderTimeout, compressionLevel int) *ServerConfig {
+func NewServerConfig(address, baseURL, jwtSignatureKey string, readHeaderTimeout, compressionLevel int) *ServerConfig {
 	return &ServerConfig{
 		Address:           address,
 		BaseURL:           baseURL,
 		ReadHeaderTimeout: readHeaderTimeout,
 		CompressionLevel:  compressionLevel,
+		JWTSignatureKey:   jwtSignatureKey,
 	}
 }
 
+func NewDefaultServerConfig() *ServerConfig {
+	return NewServerConfig(address, baseURL, jwtSignatureKey, readHeaderTimeout, compressionLevel)
+}
+
 func GetServerConfig(flagConfig *FlagConfig) *ServerConfig {
-	serverCfg := NewServerConfig("", "", 0, 0)
+	serverCfg := NewServerConfig("", "", "", 0, 0)
 
-	defaultServerCfg := ServerCfg
+	defaultServerCfg := NewDefaultServerConfig()
 
-	envServerCfg := NewServerConfig("", "", 0, 0)
+	envServerCfg := NewServerConfig("", "", "", 0, 0)
 	if err := env.Parse(envServerCfg); err != nil {
 		log.Panic(err)
 	}
 
-	yamlServerCfg := NewServerConfig("", "", 0, 0)
+	yamlServerCfg := NewServerConfig("", "", "", 0, 0)
 
 	if flagConfig.ServerConfigPath != "" {
 		file, err := os.Open(flagConfig.ServerConfigPath)
@@ -65,7 +70,7 @@ func GetServerConfig(flagConfig *FlagConfig) *ServerConfig {
 		}
 	}
 
-	flagServerCfg := NewServerConfig(flagConfig.Address, flagConfig.BaseURL, 0, 0)
+	flagServerCfg := NewServerConfig(flagConfig.Address, flagConfig.BaseURL, flagConfig.JWTSignatureKey, 0, 0)
 
 	priorityConfigs := []*ServerConfig{flagServerCfg, envServerCfg, yamlServerCfg, defaultServerCfg}
 

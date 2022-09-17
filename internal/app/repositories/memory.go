@@ -8,7 +8,7 @@ import (
 )
 
 type MemoryRepository struct {
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	shortURLs     map[models.UID]*models.ShortURL
 	userShortURLs map[uuid.UUID][]*models.ShortURL
 	lastID        int
@@ -16,7 +16,7 @@ type MemoryRepository struct {
 
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
-		mu:            sync.Mutex{},
+		mu:            sync.RWMutex{},
 		shortURLs:     map[models.UID]*models.ShortURL{},
 		userShortURLs: map[uuid.UUID][]*models.ShortURL{},
 		lastID:        0,
@@ -33,6 +33,9 @@ func (m *MemoryRepository) ReserveID() int {
 }
 
 func (m *MemoryRepository) FindOneByUID(uid models.UID) *models.ShortURL {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	shortURL, ok := m.shortURLs[uid]
 	if !ok {
 		return nil
@@ -42,6 +45,9 @@ func (m *MemoryRepository) FindOneByUID(uid models.UID) *models.ShortURL {
 }
 
 func (m *MemoryRepository) FindAllByUserID(uuid uuid.UUID) []*models.ShortURL {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	userShortURLs, ok := m.userShortURLs[uuid]
 	if !ok {
 		return nil

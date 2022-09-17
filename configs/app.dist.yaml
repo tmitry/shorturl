@@ -1,4 +1,3 @@
 hash_salt: '_X@kQePA8dmBiZVBHax*zUUi'
-hash_min_length: 10
+hash_min_length: 5
 file_storage_path: ''
-jwt_signature_key: ''

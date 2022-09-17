@@ -5,15 +5,14 @@ import (
 	"regexp"
 
 	"github.com/speps/go-hashids/v2"
-	"github.com/tmitry/shorturl/internal/app/configs"
 )
 
 type UID string
 
-func GenerateUID(identifier int) UID {
+func NewUID(identifier, hashMinLength int, hashSalt string) UID {
 	hd := hashids.NewData()
-	hd.Salt = configs.AppCfg.HashSalt
-	hd.MinLength = configs.AppCfg.HashMinLength
+	hd.Salt = hashSalt
+	hd.MinLength = hashMinLength
 	h, _ := hashids.NewWithData(hd)
 
 	str, _ := h.Encode([]int{identifier})
@@ -21,12 +20,12 @@ func GenerateUID(identifier int) UID {
 	return UID(str)
 }
 
-func GetPatternUID() string {
-	return fmt.Sprintf("[0-9a-zA-Z]{%d,}", configs.AppCfg.HashMinLength)
+func GetPatternUID(hashMinLength int) string {
+	return fmt.Sprintf("[0-9a-zA-Z]{%d,}", hashMinLength)
 }
 
-func (u UID) IsValid() (bool, error) {
-	matched, err := regexp.MatchString(GetPatternUID(), u.String())
+func (u UID) IsValid(hashMinLength int) (bool, error) {
+	matched, err := regexp.MatchString(GetPatternUID(hashMinLength), u.String())
 	if err != nil {
 		return false, fmt.Errorf("failed to match string: %w", err)
 	}

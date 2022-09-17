@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/tmitry/shorturl/internal/app/configs"
 	"github.com/tmitry/shorturl/internal/app/models"
 )
 
@@ -20,19 +19,19 @@ const (
 )
 
 type FileRepository struct {
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	shortURLs     map[models.UID]*models.ShortURL
 	userShortURLs map[uuid.UUID][]*models.ShortURL
 	lastID        int
 	encoder       *json.Encoder
 }
 
-func NewFileRepository() *FileRepository {
-	if configs.AppCfg.FileStoragePath == "" {
+func NewFileRepository(fileStoragePath string) *FileRepository {
+	if fileStoragePath == "" {
 		log.Panic(messageFileNotSpecified)
 	}
 
-	fileWriter, err := os.OpenFile(configs.AppCfg.FileStoragePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, fileMode)
+	fileWriter, err := os.OpenFile(fileStoragePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, fileMode)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -41,14 +40,14 @@ func NewFileRepository() *FileRepository {
 	encoder.SetEscapeHTML(false)
 
 	fileRepository := &FileRepository{
-		mu:            sync.Mutex{},
+		mu:            sync.RWMutex{},
 		shortURLs:     map[models.UID]*models.ShortURL{},
 		userShortURLs: map[uuid.UUID][]*models.ShortURL{},
 		lastID:        0,
 		encoder:       encoder,
 	}
 
-	fileReader, err := os.OpenFile(configs.AppCfg.FileStoragePath, os.O_RDONLY|os.O_CREATE, fileMode)
+	fileReader, err := os.OpenFile(fileStoragePath, os.O_RDONLY|os.O_CREATE, fileMode)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -90,6 +89,9 @@ func (f *FileRepository) ReserveID() int {
 }
 
 func (f *FileRepository) FindOneByUID(uid models.UID) *models.ShortURL {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
 	shortURL, ok := f.shortURLs[uid]
 	if !ok {
 		return nil
@@ -99,6 +101,9 @@ func (f *FileRepository) FindOneByUID(uid models.UID) *models.ShortURL {
 }
 
 func (f *FileRepository) FindAllByUserID(uuid uuid.UUID) []*models.ShortURL {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
 	userShortURLs, ok := f.userShortURLs[uuid]
 	if !ok {
 		return nil

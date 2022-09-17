@@ -6,6 +6,7 @@ import (
 )
 
 func main() {
-	configs.InitConfigs()
-	app.StartServer()
+	cfg := configs.NewConfig()
+
+	app.StartServer(cfg)
 }
