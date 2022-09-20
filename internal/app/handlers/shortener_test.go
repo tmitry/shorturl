@@ -10,14 +10,15 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tmitry/shorturl/internal/app/configs"
 	"github.com/tmitry/shorturl/internal/app/handlers"
 	"github.com/tmitry/shorturl/internal/app/middlewares"
+	"github.com/tmitry/shorturl/internal/app/mocks"
 	"github.com/tmitry/shorturl/internal/app/models"
-	"github.com/tmitry/shorturl/internal/app/repositories"
 )
 
 func TestShortenerHandler_Shorten(t *testing.T) {
@@ -28,7 +29,20 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 	)
 
 	cfg := configs.NewDefaultConfig()
-	rep := repositories.NewMemoryRepository()
+
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	rep := mocks.NewMockRepository(ctrl)
+
+	id := 1
+	url := models.URL("https://example.com/")
+	uid := uuid.New()
+	shortURL := models.NewShortURL(id, url, models.NewUID(id, cfg.App.HashMinLength, cfg.App.HashSalt), uid)
+
+	rep.EXPECT().ReserveID().Return(id).AnyTimes()
+	rep.EXPECT().Save(shortURL).AnyTimes()
+
 	handler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
 
 	type want struct {
@@ -67,7 +81,7 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 			t.Parallel()
 
 			request := httptest.NewRequest(http.MethodPost, cfg.Server.Address, strings.NewReader(testCase.url))
-			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, uuid.New()))
+			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, uid))
 
 			recorder := httptest.NewRecorder()
 
@@ -97,13 +111,22 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 	)
 
 	cfg := configs.NewDefaultConfig()
-	rep := repositories.NewMemoryRepository()
-	handler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
 
-	id := rep.ReserveID()
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	rep := mocks.NewMockRepository(ctrl)
+	id := 1
 	url := models.URL("https://example.com/")
 	shortURL := models.NewShortURL(id, url, models.NewUID(id, cfg.App.HashMinLength, cfg.App.HashSalt), uuid.New())
-	rep.Save(shortURL)
+
+	rep.EXPECT().FindOneByUID(shortURL.UID).Return(shortURL).AnyTimes()
+
+	notExistUID := "AJsGF"
+
+	rep.EXPECT().FindOneByUID(models.UID(notExistUID)).Return(nil).AnyTimes()
+
+	handler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
 
 	type want struct {
 		contentType string
@@ -118,7 +141,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		want    want
 	}{
 		{
-			name:    "UID parameter doesnt exist",
+			name:    "UID parameter doesn't exist",
 			request: map[string]string{},
 			want: want{
 				statusCode:  http.StatusBadRequest,
@@ -169,7 +192,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		},
 		{
 			name:    "UID not found",
-			request: map[string]string{handlers.ParameterNameUID: "AJsGF"},
+			request: map[string]string{handlers.ParameterNameUID: notExistUID},
 			want: want{
 				statusCode:  http.StatusBadRequest,
 				contentType: handlers.ContentTypeText,

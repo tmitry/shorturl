@@ -134,3 +134,17 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, request *http.Req
 	writer.Header().Set("Content-Type", ContentTypeText)
 	writer.WriteHeader(http.StatusTemporaryRedirect)
 }
+
+func (h ShortenerHandler) Ping(writer http.ResponseWriter, request *http.Request) {
+	databaseRep := repositories.NewDatabaseRepository(h.Cfg.Database)
+
+	if err := databaseRep.Ping(); err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
+
+	writer.Header().Set("Content-Type", ContentTypeText)
+	writer.WriteHeader(http.StatusOK)
+}

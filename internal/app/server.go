@@ -37,22 +37,23 @@ func NewRouter(cfg *configs.Config) http.Handler {
 	shortenerHandler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
 	shortenerAPIHandler := handlers.NewShortenerAPIHandler(cfg, rep, ContextKeyUserID)
 
-	router.Route("/", func(r chi.Router) {
-		r.Use(middleware.AllowContentType(handlers.ContentTypeText, handlers.ContentTypeGZIP))
-		r.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
-		r.Post("/", shortenerHandler.Shorten)
-		r.Get(fmt.Sprintf(
+	router.Route("/", func(router chi.Router) {
+		router.Use(middleware.AllowContentType(handlers.ContentTypeText, handlers.ContentTypeGZIP))
+		router.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
+		router.Post("/", shortenerHandler.Shorten)
+		router.Get(fmt.Sprintf(
 			"/{%s:%s}",
 			handlers.ParameterNameUID,
 			models.GetPatternUID(cfg.App.HashMinLength),
 		), shortenerHandler.Redirect)
+		router.Get("/ping", shortenerHandler.Ping)
 	})
 
-	router.Route("/api", func(r chi.Router) {
-		r.Use(middleware.AllowContentType(handlers.ContentTypeJSON, handlers.ContentTypeGZIP))
-		r.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
-		r.Post("/shorten", shortenerAPIHandler.Shorten)
-		r.Get("/user/urls", shortenerAPIHandler.UserUrls)
+	router.Route("/api", func(router chi.Router) {
+		router.Use(middleware.AllowContentType(handlers.ContentTypeJSON, handlers.ContentTypeGZIP))
+		router.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
+		router.Post("/shorten", shortenerAPIHandler.Shorten)
+		router.Get("/user/urls", shortenerAPIHandler.UserUrls)
 	})
 
 	return router
