@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -19,86 +20,156 @@ import (
 	"github.com/tmitry/shorturl/internal/app/middlewares"
 	"github.com/tmitry/shorturl/internal/app/mocks"
 	"github.com/tmitry/shorturl/internal/app/models"
+	"github.com/tmitry/shorturl/internal/app/repositories"
 )
+
+var errFailedToPing = errors.New("failed to ping")
 
 func TestShortenerHandler_Shorten(t *testing.T) {
 	t.Parallel()
 
-	const (
-		ContextKeyUserID middlewares.ContextKey = "userID"
-	)
+	type fields struct {
+		Cfg              *configs.Config
+		Rep              repositories.Repository
+		ContextKeyUserID middlewares.ContextKey
+	}
 
-	cfg := configs.NewDefaultConfig()
+	type request struct {
+		body   string
+		userID any
+	}
+
+	type response struct {
+		statusCode  int
+		contentType string
+		body        string
+	}
 
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
 
-	rep := mocks.NewMockRepository(ctrl)
+	// test case 1
+	cfg1 := configs.NewDefaultConfig()
+	rep1 := mocks.NewMockRepository(ctrl)
 
-	id := 1
-	url := models.URL("https://example.com/")
-	uid := uuid.New()
-	shortURL := models.NewShortURL(id, url, models.NewUID(id, cfg.App.HashMinLength, cfg.App.HashSalt), uid)
+	// test case 2
+	cfg2 := configs.NewDefaultConfig()
+	rep2 := mocks.NewMockRepository(ctrl)
 
-	rep.EXPECT().ReserveID().Return(id).AnyTimes()
-	rep.EXPECT().Save(shortURL).AnyTimes()
-
-	handler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
-
-	type want struct {
-		contentType string
-		statusCode  int
-		content     string
-	}
+	// test case 3
+	cfg3 := configs.NewDefaultConfig()
+	cfg3.App.HashMinLength = 3
+	cfg3.App.HashSalt = "abc"
+	cfg3.Server.BaseURL = "localhost"
+	rep3 := mocks.NewMockRepository(ctrl)
+	url3 := "https://example.com/"
+	userID3 := uuid.New()
+	shortURL3 := models.NewShortURL(1, models.URL(url3), "uid", userID3)
+	rep3.EXPECT().Save(
+		gomock.Any(),
+		models.URL(url3),
+		userID3,
+		cfg3.App.HashMinLength,
+		cfg3.App.HashSalt,
+	).Return(shortURL3, nil)
 
 	tests := []struct {
-		name string
-		url  string
-		want want
+		name     string
+		fields   fields
+		request  request
+		response response
 	}{
 		{
-			name: "bad URL",
-			url:  "bad_url",
-			want: want{
+			name: "test case 1: incorrect user id",
+			fields: fields{
+				Cfg:              cfg1,
+				Rep:              rep1,
+				ContextKeyUserID: "userID",
+			},
+			request: request{
+				body:   "https://example.com/",
+				userID: "bad user id value",
+			},
+			response: response{
+				statusCode:  http.StatusInternalServerError,
 				contentType: handlers.ContentTypeText,
-				statusCode:  http.StatusBadRequest,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectURL),
+				body:        http.StatusText(http.StatusInternalServerError),
 			},
 		},
 		{
-			name: "correct URL",
-			url:  "https://example.com/",
-			want: want{
+			name: "test case 2: incorrect url",
+			fields: fields{
+				Cfg:              cfg2,
+				Rep:              rep2,
+				ContextKeyUserID: "userID",
+			},
+			request: request{
+				body:   "bad url",
+				userID: uuid.New(),
+			},
+			response: response{
+				statusCode:  http.StatusBadRequest,
 				contentType: handlers.ContentTypeText,
+				body: fmt.Sprintf(
+					"%s: %s",
+					http.StatusText(http.StatusBadRequest),
+					handlers.MessageIncorrectURL,
+				),
+			},
+		},
+		{
+			name: "test case 3: created",
+			fields: fields{
+				Cfg:              cfg3,
+				Rep:              rep3,
+				ContextKeyUserID: "userID",
+			},
+			request: request{
+				body:   url3,
+				userID: userID3,
+			},
+			response: response{
 				statusCode:  http.StatusCreated,
-				content:     "",
+				contentType: handlers.ContentTypeText,
+				body:        string(shortURL3.GetShortURL(cfg3.Server.BaseURL)),
 			},
 		},
 	}
+
 	for _, testCase := range tests {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodPost, cfg.Server.Address, strings.NewReader(testCase.url))
-			request = request.WithContext(context.WithValue(request.Context(), ContextKeyUserID, uid))
+			shortenerHandler := handlers.ShortenerHandler{
+				Cfg:              testCase.fields.Cfg,
+				Rep:              testCase.fields.Rep,
+				ContextKeyUserID: testCase.fields.ContextKeyUserID,
+			}
+
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(testCase.request.body))
+			request = request.WithContext(context.WithValue(
+				request.Context(),
+				testCase.fields.ContextKeyUserID,
+				testCase.request.userID,
+			))
 
 			recorder := httptest.NewRecorder()
 
-			handler.Shorten(recorder, request)
+			shortenerHandler.Shorten(recorder, request)
+
 			result := recorder.Result()
 
-			assert.Equal(t, testCase.want.statusCode, result.StatusCode)
-			assert.Equal(t, testCase.want.contentType, handlers.GetContentType(result))
+			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
 
-			content, err := ioutil.ReadAll(result.Body)
+			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
+
+			body, err := ioutil.ReadAll(result.Body)
 			require.NoError(t, err)
 			err = result.Body.Close()
 			require.NoError(t, err)
 
-			if result.StatusCode != http.StatusCreated {
-				assert.Equal(t, testCase.want.content, strings.TrimSuffix(string(content), "\n"))
-			}
+			assert.Equal(t, testCase.response.body, strings.TrimSuffix(string(body), "\n"))
 		})
 	}
 }
@@ -106,141 +177,226 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 func TestShortenerHandler_Redirect(t *testing.T) {
 	t.Parallel()
 
-	const (
-		ContextKeyUserID middlewares.ContextKey = "userID"
-	)
+	type fields struct {
+		Cfg *configs.Config
+		Rep repositories.Repository
+	}
 
-	cfg := configs.NewDefaultConfig()
+	type request struct {
+		uid string
+	}
+
+	type response struct {
+		statusCode  int
+		contentType string
+		body        string
+		location    string
+	}
 
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish)
 
-	rep := mocks.NewMockRepository(ctrl)
-	id := 1
-	url := models.URL("https://example.com/")
-	shortURL := models.NewShortURL(id, url, models.NewUID(id, cfg.App.HashMinLength, cfg.App.HashSalt), uuid.New())
+	// test case 1
+	cfg1 := configs.NewDefaultConfig()
+	cfg1.App.HashMinLength = 5
+	rep1 := mocks.NewMockRepository(ctrl)
 
-	rep.EXPECT().FindOneByUID(shortURL.UID).Return(shortURL).AnyTimes()
+	// test case 2
+	cfg2 := configs.NewDefaultConfig()
+	cfg2.App.HashMinLength = 6
+	rep2 := mocks.NewMockRepository(ctrl)
+	uid2 := models.UID("AbCdEF")
+	rep2.EXPECT().FindOneByUID(gomock.Any(), uid2).Return(nil, repositories.ErrNotFound)
 
-	notExistUID := "AJsGF"
-
-	rep.EXPECT().FindOneByUID(models.UID(notExistUID)).Return(nil).AnyTimes()
-
-	handler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
-
-	type want struct {
-		contentType string
-		statusCode  int
-		content     string
-		location    string
-	}
+	// test case 3
+	cfg3 := configs.NewDefaultConfig()
+	cfg3.App.HashMinLength = 7
+	rep3 := mocks.NewMockRepository(ctrl)
+	uid3 := models.UID("AbCdEFg")
+	url3 := "https://example.com/"
+	shortURL3 := models.NewShortURL(1, models.URL(url3), uid3, uuid.New())
+	rep3.EXPECT().FindOneByUID(gomock.Any(), uid3).Return(shortURL3, nil)
 
 	tests := []struct {
-		name    string
-		request map[string]string
-		want    want
+		name     string
+		fields   fields
+		request  request
+		response response
 	}{
 		{
-			name:    "UID parameter doesn't exist",
-			request: map[string]string{},
-			want: want{
+			name: "test case 1: incorrect uid",
+			fields: fields{
+				Cfg: cfg1,
+				Rep: rep1,
+			},
+			request: request{
+				uid: "abc",
+			},
+			response: response{
 				statusCode:  http.StatusBadRequest,
 				contentType: handlers.ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
-				location:    "",
+				body: fmt.Sprintf(
+					"%s: %s",
+					http.StatusText(http.StatusBadRequest),
+					handlers.MessageIncorrectUID,
+				),
+				location: "",
 			},
 		},
 		{
-			name:    "wrong UID parameter name",
-			request: map[string]string{"u_id": "gIJsL"},
-			want: want{
+			name: "test case 2: url not found",
+			fields: fields{
+				Cfg: cfg2,
+				Rep: rep2,
+			},
+			request: request{
+				uid: uid2.String(),
+			},
+			response: response{
 				statusCode:  http.StatusBadRequest,
 				contentType: handlers.ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
-				location:    "",
+				body: fmt.Sprintf(
+					"%s: %s",
+					http.StatusText(http.StatusBadRequest),
+					handlers.MessageURLNotFound,
+				),
+				location: "",
 			},
 		},
 		{
-			name:    "empty UID parameter",
-			request: map[string]string{"uid": ""},
-			want: want{
-				statusCode:  http.StatusBadRequest,
-				contentType: handlers.ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
-				location:    "",
+			name: "test case 3: redirect",
+			fields: fields{
+				Cfg: cfg3,
+				Rep: rep3,
 			},
-		},
-		{
-			name:    "UID has few characters",
-			request: map[string]string{handlers.ParameterNameUID: "asd"},
-			want: want{
-				statusCode:  http.StatusBadRequest,
-				contentType: handlers.ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
-				location:    "",
+			request: request{
+				uid: uid3.String(),
 			},
-		},
-		{
-			name:    "UID has invalid characters",
-			request: map[string]string{handlers.ParameterNameUID: "a#s-d!a"},
-			want: want{
-				statusCode:  http.StatusBadRequest,
-				contentType: handlers.ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectUID),
-				location:    "",
-			},
-		},
-		{
-			name:    "UID not found",
-			request: map[string]string{handlers.ParameterNameUID: notExistUID},
-			want: want{
-				statusCode:  http.StatusBadRequest,
-				contentType: handlers.ContentTypeText,
-				content:     fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageURLNotFound),
-				location:    "",
-			},
-		},
-		{
-			name:    "correct UID",
-			request: map[string]string{handlers.ParameterNameUID: shortURL.UID.String()},
-			want: want{
+			response: response{
 				statusCode:  http.StatusTemporaryRedirect,
 				contentType: handlers.ContentTypeText,
-				content:     "",
-				location:    shortURL.URL.String(),
+				body:        "",
+				location:    url3,
 			},
 		},
 	}
-
 	for _, testCase := range tests {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			request := httptest.NewRequest(http.MethodGet, cfg.Server.Address, nil)
-			request.Header.Set("Content-Type", handlers.ContentTypeText)
-
-			routeCtx := chi.NewRouteContext()
-			for param, value := range testCase.request {
-				routeCtx.URLParams.Add(param, value)
+			handler := handlers.ShortenerHandler{
+				Cfg:              testCase.fields.Cfg,
+				Rep:              testCase.fields.Rep,
+				ContextKeyUserID: "",
 			}
+
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			routeCtx := chi.NewRouteContext()
+			routeCtx.URLParams.Add(handlers.ParameterNameUID, testCase.request.uid)
 			request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routeCtx))
 
 			recorder := httptest.NewRecorder()
-
 			handler.Redirect(recorder, request)
 			result := recorder.Result()
 
-			assert.Equal(t, testCase.want.statusCode, result.StatusCode)
-			assert.Equal(t, testCase.want.contentType, handlers.GetContentType(result))
-			assert.Equal(t, testCase.want.location, result.Header.Get("Location"))
+			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
+			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
 
-			content, err := ioutil.ReadAll(result.Body)
+			body, err := ioutil.ReadAll(result.Body)
 			require.NoError(t, err)
 			err = result.Body.Close()
 			require.NoError(t, err)
 
-			assert.Equal(t, testCase.want.content, strings.TrimSuffix(string(content), "\n"))
+			assert.Equal(t, testCase.response.body, strings.TrimSuffix(string(body), "\n"))
+			assert.Equal(t, testCase.response.location, result.Header.Get("Location"))
+		})
+	}
+}
+
+func TestShortenerHandler_Ping(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		Cfg *configs.Config
+		Rep repositories.Repository
+	}
+
+	type response struct {
+		statusCode  int
+		contentType string
+		body        string
+	}
+
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	// test case 1
+	cfg1 := configs.NewDefaultConfig()
+	rep1 := mocks.NewMockRepository(ctrl)
+	rep1.EXPECT().Ping(gomock.Any()).Return(errFailedToPing)
+
+	// test case 2
+	cfg2 := configs.NewDefaultConfig()
+	rep2 := mocks.NewMockRepository(ctrl)
+	rep2.EXPECT().Ping(gomock.Any()).Return(nil)
+
+	tests := []struct {
+		name     string
+		fields   fields
+		response response
+	}{
+		{
+			name: "test case 1: failed to ping",
+			fields: fields{
+				Cfg: cfg1,
+				Rep: rep1,
+			},
+			response: response{
+				statusCode:  http.StatusInternalServerError,
+				contentType: handlers.ContentTypeText,
+				body:        http.StatusText(http.StatusInternalServerError),
+			},
+		},
+		{
+			name: "test case 2: ok",
+			fields: fields{
+				Cfg: cfg2,
+				Rep: rep2,
+			},
+			response: response{
+				statusCode:  http.StatusOK,
+				contentType: handlers.ContentTypeText,
+				body:        "",
+			},
+		},
+	}
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := handlers.ShortenerHandler{
+				Cfg:              testCase.fields.Cfg,
+				Rep:              testCase.fields.Rep,
+				ContextKeyUserID: "",
+			}
+
+			request := httptest.NewRequest(http.MethodGet, "/ping", nil)
+
+			recorder := httptest.NewRecorder()
+			handler.Ping(recorder, request)
+			result := recorder.Result()
+
+			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
+			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
+
+			body, err := ioutil.ReadAll(result.Body)
+			require.NoError(t, err)
+			err = result.Body.Close()
+			require.NoError(t, err)
+
+			assert.Equal(t, testCase.response.body, strings.TrimSuffix(string(body), "\n"))
 		})
 	}
 }

@@ -28,9 +28,12 @@ func NewRouter(cfg *configs.Config) http.Handler {
 
 	var rep repositories.Repository
 
-	if cfg.App.FileStoragePath != "" {
+	switch {
+	case cfg.Database.DSN != "":
+		rep = repositories.NewDatabaseRepository(cfg.Database)
+	case cfg.App.FileStoragePath != "":
 		rep = repositories.NewFileRepository(cfg.App.FileStoragePath)
-	} else {
+	default:
 		rep = repositories.NewMemoryRepository()
 	}
 

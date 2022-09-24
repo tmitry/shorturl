@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -107,15 +108,13 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	id := h.Rep.ReserveID()
-	shortURL := models.NewShortURL(
-		id,
-		requestJSON.URL,
-		models.NewUID(id, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt),
-		userID,
-	)
+	shortURL, err := h.Rep.Save(request.Context(), requestJSON.URL, userID, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
 
-	h.Rep.Save(shortURL)
+		return
+	}
 
 	writer.Header().Set("Content-Type", ContentTypeJSON)
 	writer.WriteHeader(http.StatusCreated)
@@ -152,9 +151,16 @@ func (h ShortenerAPIHandler) UserUrls(writer http.ResponseWriter, request *http.
 		return
 	}
 
-	userShortURLs := h.Rep.FindAllByUserID(userID)
-	if userShortURLs == nil {
-		http.Error(writer, http.StatusText(http.StatusNoContent), http.StatusNoContent)
+	userShortURLs, err := h.Rep.FindAllByUserID(request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, repositories.ErrNotFound) {
+			http.Error(writer, http.StatusText(http.StatusNoContent), http.StatusNoContent)
+
+			return
+		}
+
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
 
 		return
 	}
@@ -167,7 +173,7 @@ func (h ShortenerAPIHandler) UserUrls(writer http.ResponseWriter, request *http.
 	jsonEncoder := json.NewEncoder(&buf)
 	jsonEncoder.SetEscapeHTML(false)
 
-	err := jsonEncoder.Encode(responseJSON)
+	err = jsonEncoder.Encode(responseJSON)
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())

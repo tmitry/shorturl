@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -70,21 +71,20 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 	}
 
 	url := models.URL(body)
-
 	if !url.IsValid() {
-		http.Error(
-			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectURL),
-			http.StatusBadRequest,
-		)
+		http.Error(writer, fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectURL),
+			http.StatusBadRequest)
 
 		return
 	}
 
-	id := h.Rep.ReserveID()
-	shortURL := models.NewShortURL(id, url, models.NewUID(id, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt), userID)
+	shortURL, err := h.Rep.Save(request.Context(), url, userID, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
 
-	h.Rep.Save(shortURL)
+		return
+	}
 
 	writer.Header().Set("Content-Type", ContentTypeText)
 	writer.WriteHeader(http.StatusCreated)
@@ -119,13 +119,20 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	shortURL := h.Rep.FindOneByUID(uid)
-	if shortURL == nil {
-		http.Error(
-			writer,
-			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageURLNotFound),
-			http.StatusBadRequest,
-		)
+	shortURL, err := h.Rep.FindOneByUID(request.Context(), uid)
+	if err != nil {
+		if errors.Is(err, repositories.ErrNotFound) {
+			http.Error(
+				writer,
+				fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageURLNotFound),
+				http.StatusBadRequest,
+			)
+
+			return
+		}
+
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
 
 		return
 	}
@@ -136,9 +143,7 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, request *http.Req
 }
 
 func (h ShortenerHandler) Ping(writer http.ResponseWriter, request *http.Request) {
-	databaseRep := repositories.NewDatabaseRepository(h.Cfg.Database)
-
-	if err := databaseRep.Ping(); err != nil {
+	if err := h.Rep.Ping(request.Context()); err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
 
