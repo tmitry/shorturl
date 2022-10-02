@@ -5,6 +5,7 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -36,55 +37,60 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 }
 
 // FindAllByUserID mocks base method.
-func (m *MockRepository) FindAllByUserID(arg0 uuid.UUID) []*models.ShortURL {
+func (m *MockRepository) FindAllByUserID(arg0 context.Context, arg1 uuid.UUID) ([]*models.ShortURL, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindAllByUserID", arg0)
+	ret := m.ctrl.Call(m, "FindAllByUserID", arg0, arg1)
 	ret0, _ := ret[0].([]*models.ShortURL)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // FindAllByUserID indicates an expected call of FindAllByUserID.
-func (mr *MockRepositoryMockRecorder) FindAllByUserID(arg0 interface{}) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) FindAllByUserID(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAllByUserID", reflect.TypeOf((*MockRepository)(nil).FindAllByUserID), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAllByUserID", reflect.TypeOf((*MockRepository)(nil).FindAllByUserID), arg0, arg1)
 }
 
 // FindOneByUID mocks base method.
-func (m *MockRepository) FindOneByUID(arg0 models.UID) *models.ShortURL {
+func (m *MockRepository) FindOneByUID(arg0 context.Context, arg1 models.UID) (*models.ShortURL, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindOneByUID", arg0)
+	ret := m.ctrl.Call(m, "FindOneByUID", arg0, arg1)
 	ret0, _ := ret[0].(*models.ShortURL)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // FindOneByUID indicates an expected call of FindOneByUID.
-func (mr *MockRepositoryMockRecorder) FindOneByUID(arg0 interface{}) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) FindOneByUID(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOneByUID", reflect.TypeOf((*MockRepository)(nil).FindOneByUID), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindOneByUID", reflect.TypeOf((*MockRepository)(nil).FindOneByUID), arg0, arg1)
 }
 
-// ReserveID mocks base method.
-func (m *MockRepository) ReserveID() int {
+// Ping mocks base method.
+func (m *MockRepository) Ping(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReserveID")
-	ret0, _ := ret[0].(int)
+	ret := m.ctrl.Call(m, "Ping", arg0)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ReserveID indicates an expected call of ReserveID.
-func (mr *MockRepositoryMockRecorder) ReserveID() *gomock.Call {
+// Ping indicates an expected call of Ping.
+func (mr *MockRepositoryMockRecorder) Ping(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReserveID", reflect.TypeOf((*MockRepository)(nil).ReserveID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockRepository)(nil).Ping), arg0)
 }
 
 // Save mocks base method.
-func (m *MockRepository) Save(arg0 *models.ShortURL) {
+func (m *MockRepository) Save(arg0 context.Context, arg1 models.URL, arg2 uuid.UUID, arg3 int, arg4 string) (*models.ShortURL, error) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Save", arg0)
+	ret := m.ctrl.Call(m, "Save", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(*models.ShortURL)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockRepositoryMockRecorder) Save(arg0 interface{}) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) Save(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockRepository)(nil).Save), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockRepository)(nil).Save), arg0, arg1, arg2, arg3, arg4)
 }

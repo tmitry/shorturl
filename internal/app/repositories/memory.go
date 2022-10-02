@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"sync"
 
 	"github.com/google/uuid"
@@ -11,7 +12,6 @@ type MemoryRepository struct {
 	mu            sync.RWMutex
 	shortURLs     map[models.UID]*models.ShortURL
 	userShortURLs map[uuid.UUID][]*models.ShortURL
-	lastID        int
 }
 
 func NewMemoryRepository() *MemoryRepository {
@@ -19,47 +19,53 @@ func NewMemoryRepository() *MemoryRepository {
 		mu:            sync.RWMutex{},
 		shortURLs:     map[models.UID]*models.ShortURL{},
 		userShortURLs: map[uuid.UUID][]*models.ShortURL{},
-		lastID:        0,
 	}
 }
 
-func (m *MemoryRepository) ReserveID() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.lastID++
-
-	return m.lastID
-}
-
-func (m *MemoryRepository) FindOneByUID(uid models.UID) *models.ShortURL {
+func (m *MemoryRepository) FindOneByUID(_ context.Context, uid models.UID) (*models.ShortURL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	shortURL, ok := m.shortURLs[uid]
 	if !ok {
-		return nil
+		return nil, ErrNotFound
 	}
 
-	return shortURL
+	return shortURL, nil
 }
 
-func (m *MemoryRepository) FindAllByUserID(uuid uuid.UUID) []*models.ShortURL {
+func (m *MemoryRepository) FindAllByUserID(_ context.Context, userID uuid.UUID) ([]*models.ShortURL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	userShortURLs, ok := m.userShortURLs[uuid]
+	userShortURLs, ok := m.userShortURLs[userID]
 	if !ok {
-		return nil
+		return nil, ErrNotFound
 	}
 
-	return userShortURLs
+	return userShortURLs, nil
 }
 
-func (m *MemoryRepository) Save(shortURL *models.ShortURL) {
+func (m *MemoryRepository) Save(
+	_ context.Context,
+	url models.URL,
+	userID uuid.UUID,
+	hashMinLength int,
+	hashSalt string,
+) (*models.ShortURL, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	id := len(m.shortURLs) + 1
+
+	shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
+
 	m.shortURLs[shortURL.UID] = shortURL
 	m.userShortURLs[shortURL.UserID] = append(m.userShortURLs[shortURL.UserID], shortURL)
+
+	return shortURL, nil
+}
+
+func (m *MemoryRepository) Ping(_ context.Context) error {
+	return nil
 }

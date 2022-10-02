@@ -7,7 +7,7 @@ import (
 )
 
 type ShortURL struct {
-	id     int
+	ID     int
 	UID    UID
 	URL    URL
 	UserID uuid.UUID
@@ -15,7 +15,7 @@ type ShortURL struct {
 
 func NewShortURL(id int, url URL, uid UID, userID uuid.UUID) *ShortURL {
 	return &ShortURL{
-		id:     id,
+		ID:     id,
 		UID:    uid,
 		URL:    url,
 		UserID: userID,
