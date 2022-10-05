@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib" // solely for its side effects (initialization)
@@ -14,12 +13,10 @@ import (
 	"github.com/tmitry/shorturl/internal/app/models"
 )
 
-const (
-	defaultQueryTimeout = 5
-)
-
 type DatabaseRepository struct {
-	db *sql.DB
+	db         *sql.DB
+	insertStmt *sql.Stmt
+	updateStmt *sql.Stmt
 }
 
 func NewDatabaseRepository(databaseCfg *configs.DatabaseConfig) *DatabaseRepository {
@@ -29,7 +26,9 @@ func NewDatabaseRepository(databaseCfg *configs.DatabaseConfig) *DatabaseReposit
 	}
 
 	rep := &DatabaseRepository{
-		db: database,
+		db:         database,
+		insertStmt: nil,
+		updateStmt: nil,
 	}
 
 	err = rep.CreateDatabase()
@@ -37,13 +36,28 @@ func NewDatabaseRepository(databaseCfg *configs.DatabaseConfig) *DatabaseReposit
 		log.Panic(err)
 	}
 
+	insertStmt, err := database.Prepare(
+		"INSERT INTO short_url(url, uid, user_id) VALUES($1, '', $2) RETURNING id",
+	)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	rep.insertStmt = insertStmt
+
+	updateStmt, err := database.Prepare(
+		"UPDATE short_url SET uid = $1 WHERE id = $2",
+	)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	rep.updateStmt = updateStmt
+
 	return rep
 }
 
 func (d DatabaseRepository) FindOneByUID(ctx context.Context, uid models.UID) (*models.ShortURL, error) {
-	ctx, cancel := context.WithTimeout(ctx, defaultQueryTimeout*time.Second)
-	defer cancel()
-
 	shortURL := models.NewShortURL(0, "", "", uuid.UUID{})
 
 	err := d.db.QueryRowContext(ctx, "SELECT id, uid, url, user_id FROM short_url WHERE uid = $1", uid).Scan(
@@ -63,10 +77,7 @@ func (d DatabaseRepository) FindOneByUID(ctx context.Context, uid models.UID) (*
 	return shortURL, nil
 }
 
-func (d DatabaseRepository) FindAllByUserID(ctx context.Context, userID uuid.UUID) ([]*models.ShortURL, error) {
-	ctx, cancel := context.WithTimeout(ctx, defaultQueryTimeout*time.Second)
-	defer cancel()
-
+func (d DatabaseRepository) FindAllByUserID(ctx context.Context, userID uuid.UUID) (_ []*models.ShortURL, fnErr error) {
 	var userShortURLs []*models.ShortURL
 
 	rows, err := d.db.QueryContext(ctx, "SELECT id, uid, url, user_id FROM short_url WHERE user_id = $1", userID)
@@ -74,7 +85,12 @@ func (d DatabaseRepository) FindAllByUserID(ctx context.Context, userID uuid.UUI
 		return nil, fmt.Errorf("%s: %w", messageFailedToFind, err)
 	}
 
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			fnErr = err
+		}
+	}(rows)
 
 	for rows.Next() {
 		shortURL := models.NewShortURL(0, "", "", uuid.UUID{})
@@ -110,31 +126,103 @@ func (d DatabaseRepository) Save(
 	userID uuid.UUID,
 	hashMinLength int,
 	hashSalt string,
-) (*models.ShortURL, error) {
-	ctx, cancel := context.WithTimeout(ctx, defaultQueryTimeout*time.Second)
-	defer cancel()
-
-	query := "INSERT INTO short_url(url, user_id) VALUES($1, $2) RETURNING id"
-
-	id := 0
-	if err := d.db.QueryRowContext(ctx, query, url, userID).Scan(&id); err != nil {
+) (_ *models.ShortURL, fnErr error) {
+	transaction, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
 		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
 	}
 
-	shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
+	defer func(transaction *sql.Tx) {
+		err := transaction.Rollback()
+		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+			fnErr = fmt.Errorf("%s: %w", messageFailedToSave, err)
+		}
+	}(transaction)
 
-	_, err := d.db.ExecContext(ctx, "UPDATE short_url SET uid = $1 WHERE id = $2", shortURL.UID, shortURL.ID)
+	identifier := 0
+
+	insertTxStmt := transaction.StmtContext(ctx, d.insertStmt)
+
+	row := insertTxStmt.QueryRowContext(ctx, url, userID)
+	if row.Err() != nil {
+		return nil, fmt.Errorf("%s: %w", messageFailedToSave, row.Err())
+	}
+
+	if err := row.Scan(&identifier); err != nil {
+		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+	}
+
+	shortURL := models.NewShortURL(identifier, url, models.NewUID(identifier, hashMinLength, hashSalt), userID)
+
+	updateTxStmt := transaction.StmtContext(ctx, d.updateStmt)
+
+	_, err = updateTxStmt.ExecContext(ctx, shortURL.UID, shortURL.ID)
 	if err != nil {
+		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+	}
+
+	if err = transaction.Commit(); err != nil {
 		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
 	}
 
 	return shortURL, nil
 }
 
-func (d DatabaseRepository) Ping(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, defaultQueryTimeout*time.Second)
-	defer cancel()
+func (d DatabaseRepository) BatchSave(
+	ctx context.Context,
+	urls []models.URL,
+	userID uuid.UUID,
+	hashMinLength int,
+	hashSalt string,
+) (_ []*models.ShortURL, fnErr error) {
+	transaction, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+	}
 
+	defer func(transaction *sql.Tx) {
+		err := transaction.Rollback()
+		if err != nil && !errors.Is(err, sql.ErrTxDone) {
+			fnErr = fmt.Errorf("%s: %w", messageFailedToSave, err)
+		}
+	}(transaction)
+
+	batchShortURLs := make([]*models.ShortURL, 0, len(urls))
+
+	for _, url := range urls {
+		identifier := 0
+
+		insertTxStmt := transaction.StmtContext(ctx, d.insertStmt)
+
+		row := insertTxStmt.QueryRowContext(ctx, url, userID)
+		if row.Err() != nil {
+			return nil, fmt.Errorf("%s: %w", messageFailedToSave, row.Err())
+		}
+
+		if err := row.Scan(&identifier); err != nil {
+			return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+		}
+
+		shortURL := models.NewShortURL(identifier, url, models.NewUID(identifier, hashMinLength, hashSalt), userID)
+
+		updateTxStmt := transaction.StmtContext(ctx, d.updateStmt)
+
+		_, err = updateTxStmt.ExecContext(ctx, shortURL.UID, shortURL.ID)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+		}
+
+		batchShortURLs = append(batchShortURLs, shortURL)
+	}
+
+	if err = transaction.Commit(); err != nil {
+		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+	}
+
+	return batchShortURLs, nil
+}
+
+func (d DatabaseRepository) Ping(ctx context.Context) error {
 	if err := d.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("%s: %w", messageFailedToPing, err)
 	}
@@ -143,13 +231,10 @@ func (d DatabaseRepository) Ping(ctx context.Context) error {
 }
 
 func (d DatabaseRepository) CreateDatabase() error {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout*time.Second)
-	defer cancel()
-
 	query := `
 CREATE TABLE IF NOT EXISTS short_url (
 	id SERIAL,
-	uid VARCHAR(32),
+	uid VARCHAR(32) NOT NULL,
 	url TEXT NOT NULL,
 	user_id VARCHAR(36) NOT NULL,
 	CONSTRAINT short_url_pkey PRIMARY KEY (id)
@@ -159,7 +244,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS short_url_uid_idx ON short_url (uid);
 CREATE INDEX IF NOT EXISTS short_url_user_id_idx ON short_url (user_id);
 `
 
-	if _, err := d.db.ExecContext(ctx, query); err != nil {
+	if _, err := d.db.Exec(query); err != nil {
 		return fmt.Errorf("%s: %w", messageFailedToCreateDatabase, err)
 	}
 

@@ -60,8 +60,8 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 	// test case 4
 	cfg4 := configs.NewDefaultConfig()
 	cfg4.App.HashMinLength = 5
-	cfg4.App.HashSalt = "abc"
-	cfg4.Server.BaseURL = "localhost"
+	cfg4.App.HashSalt = "salt"
+	cfg4.Server.BaseURL = "baseurl"
 	rep4 := mocks.NewMockRepository(ctrl)
 	url4 := "https://example-site.com/"
 	body4 := fmt.Sprintf(`{"url":"%s"}`, url4)
@@ -90,7 +90,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			fields: fields{
 				Cfg:              cfg1,
 				Rep:              rep1,
-				ContextKeyUserID: "userID",
+				ContextKeyUserID: "userId",
 			},
 			request: request{
 				body:   `{"url":"https://example1.com/"}`,
@@ -107,7 +107,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			fields: fields{
 				Cfg:              cfg2,
 				Rep:              rep2,
-				ContextKeyUserID: "userID",
+				ContextKeyUserID: "userId",
 			},
 			request: request{
 				body:   `bad json`,
@@ -128,7 +128,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			fields: fields{
 				Cfg:              cfg3,
 				Rep:              rep3,
-				ContextKeyUserID: "userID",
+				ContextKeyUserID: "userId",
 			},
 			request: request{
 				body:   `{"url":"incorrect url"}`,
@@ -145,7 +145,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			fields: fields{
 				Cfg:              cfg4,
 				Rep:              rep4,
-				ContextKeyUserID: "userID",
+				ContextKeyUserID: "userId",
 			},
 			request: request{
 				body:   body4,
@@ -169,19 +169,17 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 				ContextKeyUserID: testCase.fields.ContextKeyUserID,
 			}
 
-			request := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(testCase.request.body))
-			request = request.WithContext(context.WithValue(
-				request.Context(),
+			requestAPIShorten := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(testCase.request.body))
+			requestAPIShorten = requestAPIShorten.WithContext(context.WithValue(
+				requestAPIShorten.Context(),
 				testCase.fields.ContextKeyUserID,
 				testCase.request.userID,
 			))
 
 			recorder := httptest.NewRecorder()
-			shortenerAPIHandler.Shorten(recorder, request)
-			result := recorder.Result()
 
-			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
-			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
+			shortenerAPIHandler.Shorten(recorder, requestAPIShorten)
+			result := recorder.Result()
 
 			body, err := ioutil.ReadAll(result.Body)
 			require.NoError(t, err)
@@ -189,6 +187,8 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, testCase.response.body, strings.TrimSuffix(string(body), "\n"))
+			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
+			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
 		})
 	}
 }
@@ -319,6 +319,202 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 
 			recorder := httptest.NewRecorder()
 			shortenerAPIHandler.UserUrls(recorder, request)
+			result := recorder.Result()
+
+			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
+			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
+
+			body, err := ioutil.ReadAll(result.Body)
+			require.NoError(t, err)
+			err = result.Body.Close()
+			require.NoError(t, err)
+
+			assert.Equal(t, testCase.response.body, strings.TrimSuffix(string(body), "\n"))
+		})
+	}
+}
+
+func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		Cfg              *configs.Config
+		Rep              repositories.Repository
+		ContextKeyUserID middlewares.ContextKey
+	}
+
+	type request struct {
+		body   string
+		userID any
+	}
+
+	type response struct {
+		statusCode  int
+		body        string
+		contentType string
+	}
+
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	// test case 1
+	cfg1 := configs.NewDefaultConfig()
+	rep1 := mocks.NewMockRepository(ctrl)
+
+	// test case 2
+	cfg2 := configs.NewDefaultConfig()
+	rep2 := mocks.NewMockRepository(ctrl)
+
+	// test case 3
+	cfg3 := configs.NewDefaultConfig()
+	rep3 := mocks.NewMockRepository(ctrl)
+
+	// test case 4
+	cfg4 := configs.NewDefaultConfig()
+	cfg4.App.HashMinLength = 5
+	cfg4.App.HashSalt = "abc"
+	cfg4.Server.BaseURL = "localhost"
+	rep4 := mocks.NewMockRepository(ctrl)
+
+	urls := []models.URL{"https://mysite.com?id=u1", "https://mysite.com?id=u2"}
+	correlationIDs := []string{"u1", "u2"}
+
+	body4 := fmt.Sprintf(`[
+    {
+        "correlation_id": "%s",
+        "original_url": "%s"
+    },
+    {
+        "correlation_id": "%s",
+        "original_url": "%s"
+    }
+]`, correlationIDs[0], urls[0], correlationIDs[1], urls[1])
+	userID4 := uuid.New()
+	uid4 := models.UID("AbCdEf")
+	batchShortURLs := []*models.ShortURL{
+		models.NewShortURL(1, urls[0], uid4, userID4),
+		models.NewShortURL(1, urls[1], uid4, userID4),
+	}
+
+	rep4.EXPECT().BatchSave(
+		gomock.Any(),
+		urls,
+		userID4,
+		cfg4.App.HashMinLength,
+		cfg4.App.HashSalt,
+	).Return(batchShortURLs, nil)
+
+	json4, err := json.Marshal(handlers.NewShortenBatchResponseJSON(
+		batchShortURLs,
+		correlationIDs,
+		cfg4.Server.BaseURL),
+	)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		fields   fields
+		request  request
+		response response
+	}{
+		{
+			name: "test case 1: incorrect user id",
+			fields: fields{
+				Cfg:              cfg1,
+				Rep:              rep1,
+				ContextKeyUserID: "userID",
+			},
+			request: request{
+				body:   `[{"correlation_id": "u1", "original_url": "https://mysite.com?id=u1"}]`,
+				userID: "bad user id value",
+			},
+			response: response{
+				statusCode:  http.StatusInternalServerError,
+				body:        http.StatusText(http.StatusInternalServerError),
+				contentType: handlers.ContentTypeText,
+			},
+		},
+		{
+			name: "test case 2: incorrect json",
+			fields: fields{
+				Cfg:              cfg2,
+				Rep:              rep2,
+				ContextKeyUserID: "userID",
+			},
+			request: request{
+				body:   `bad json`,
+				userID: uuid.New(),
+			},
+			response: response{
+				statusCode: http.StatusBadRequest,
+				body: fmt.Sprintf(
+					"%s: %s",
+					http.StatusText(http.StatusBadRequest),
+					handlers.MessageIncorrectJSON,
+				),
+				contentType: handlers.ContentTypeText,
+			},
+		},
+		{
+			name: "test case 3: incorrect url",
+			fields: fields{
+				Cfg:              cfg3,
+				Rep:              rep3,
+				ContextKeyUserID: "userID",
+			},
+			request: request{
+				body:   `[{"correlation_id": "u1", "original_url": "bad url"}]`,
+				userID: uuid.New(),
+			},
+			response: response{
+				statusCode:  http.StatusBadRequest,
+				body:        fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), handlers.MessageIncorrectURL),
+				contentType: handlers.ContentTypeText,
+			},
+		},
+		{
+			name: "test case 4: created",
+			fields: fields{
+				Cfg:              cfg4,
+				Rep:              rep4,
+				ContextKeyUserID: "userID",
+			},
+			request: request{
+				body:   body4,
+				userID: userID4,
+			},
+			response: response{
+				statusCode:  http.StatusCreated,
+				body:        string(json4),
+				contentType: handlers.ContentTypeJSON,
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			shortenerAPIHandler := handlers.ShortenerAPIHandler{
+				Cfg:              testCase.fields.Cfg,
+				Rep:              testCase.fields.Rep,
+				ContextKeyUserID: testCase.fields.ContextKeyUserID,
+			}
+
+			requestShortenAPIBatch := httptest.NewRequest(
+				http.MethodPost,
+				"/api/shorten/batch",
+				strings.NewReader(testCase.request.body),
+			)
+			requestShortenAPIBatch = requestShortenAPIBatch.WithContext(context.WithValue(
+				requestShortenAPIBatch.Context(),
+				testCase.fields.ContextKeyUserID,
+				testCase.request.userID,
+			))
+
+			recorder := httptest.NewRecorder()
+			shortenerAPIHandler.ShortenBatch(recorder, requestShortenAPIBatch)
 			result := recorder.Result()
 
 			assert.Equal(t, testCase.response.statusCode, result.StatusCode)

@@ -18,17 +18,25 @@ const (
 var ErrNotFound = errors.New("not found")
 
 type Repository interface {
-	FindOneByUID(requestCtx context.Context, uid models.UID) (*models.ShortURL, error)
+	FindOneByUID(ctx context.Context, uid models.UID) (*models.ShortURL, error)
 
-	FindAllByUserID(requestCtx context.Context, userID uuid.UUID) ([]*models.ShortURL, error)
+	FindAllByUserID(ctx context.Context, userID uuid.UUID) ([]*models.ShortURL, error)
 
 	Save(
-		requestCtx context.Context,
+		ctx context.Context,
 		url models.URL,
 		userID uuid.UUID,
 		hashMinLength int,
 		hashSalt string,
 	) (*models.ShortURL, error)
 
-	Ping(requestCtx context.Context) error
+	BatchSave(
+		ctx context.Context,
+		urls []models.URL,
+		userID uuid.UUID,
+		hashMinLength int,
+		hashSalt string,
+	) ([]*models.ShortURL, error)
+
+	Ping(ctx context.Context) error
 }

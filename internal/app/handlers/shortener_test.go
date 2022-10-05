@@ -147,18 +147,18 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 				ContextKeyUserID: testCase.fields.ContextKeyUserID,
 			}
 
-			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(testCase.request.body))
-			request = request.WithContext(context.WithValue(
-				request.Context(),
+			requestShorten := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(testCase.request.body))
+			requestShorten = requestShorten.WithContext(context.WithValue(
+				requestShorten.Context(),
 				testCase.fields.ContextKeyUserID,
 				testCase.request.userID,
 			))
 
-			recorder := httptest.NewRecorder()
+			recorderShorten := httptest.NewRecorder()
 
-			shortenerHandler.Shorten(recorder, request)
+			shortenerHandler.Shorten(recorderShorten, requestShorten)
 
-			result := recorder.Result()
+			result := recorderShorten.Result()
 
 			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
 

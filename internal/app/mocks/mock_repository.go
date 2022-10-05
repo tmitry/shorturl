@@ -36,6 +36,21 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 	return m.recorder
 }
 
+// BatchSave mocks base method.
+func (m *MockRepository) BatchSave(arg0 context.Context, arg1 []models.URL, arg2 uuid.UUID, arg3 int, arg4 string) ([]*models.ShortURL, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchSave", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].([]*models.ShortURL)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BatchSave indicates an expected call of BatchSave.
+func (mr *MockRepositoryMockRecorder) BatchSave(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchSave", reflect.TypeOf((*MockRepository)(nil).BatchSave), arg0, arg1, arg2, arg3, arg4)
+}
+
 // FindAllByUserID mocks base method.
 func (m *MockRepository) FindAllByUserID(arg0 context.Context, arg1 uuid.UUID) ([]*models.ShortURL, error) {
 	m.ctrl.T.Helper()

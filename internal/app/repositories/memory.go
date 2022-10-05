@@ -66,6 +66,30 @@ func (m *MemoryRepository) Save(
 	return shortURL, nil
 }
 
+func (m *MemoryRepository) BatchSave(
+	_ context.Context,
+	urls []models.URL,
+	userID uuid.UUID,
+	hashMinLength int,
+	hashSalt string,
+) ([]*models.ShortURL, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	batchShortURLs := make([]*models.ShortURL, 0, len(urls))
+
+	for _, url := range urls {
+		id := len(m.shortURLs) + 1
+		shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
+		batchShortURLs = append(batchShortURLs, shortURL)
+
+		m.shortURLs[shortURL.UID] = shortURL
+		m.userShortURLs[shortURL.UserID] = append(m.userShortURLs[shortURL.UserID], shortURL)
+	}
+
+	return batchShortURLs, nil
+}
+
 func (m *MemoryRepository) Ping(_ context.Context) error {
 	return nil
 }

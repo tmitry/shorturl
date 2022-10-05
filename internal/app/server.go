@@ -57,6 +57,7 @@ func NewRouter(cfg *configs.Config) http.Handler {
 		router.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
 		router.Post("/shorten", shortenerAPIHandler.Shorten)
 		router.Get("/user/urls", shortenerAPIHandler.UserUrls)
+		router.Post("/shorten/batch", shortenerAPIHandler.ShortenBatch)
 	})
 
 	return router
