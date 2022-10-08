@@ -1,7 +1,6 @@
 package repositories
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,7 +24,6 @@ type FileRepository struct {
 	mu            sync.RWMutex
 	shortURLs     map[models.UID]*models.ShortURL
 	userShortURLs map[uuid.UUID][]*models.ShortURL
-	fileWriter    *os.File
 	encoder       *json.Encoder
 }
 
@@ -46,7 +44,6 @@ func NewFileRepository(fileStoragePath string) *FileRepository {
 		mu:            sync.RWMutex{},
 		shortURLs:     map[models.UID]*models.ShortURL{},
 		userShortURLs: map[uuid.UUID][]*models.ShortURL{},
-		fileWriter:    fileWriter,
 		encoder:       encoder,
 	}
 
@@ -115,6 +112,15 @@ func (f *FileRepository) Save(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	userShortURLs, ok := f.userShortURLs[userID]
+	if ok {
+		for _, userShortURL := range userShortURLs {
+			if userShortURL.URL == url {
+				return userShortURL, ErrDuplicate
+			}
+		}
+	}
+
 	id := len(f.shortURLs) + 1
 
 	shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
@@ -142,27 +148,35 @@ func (f *FileRepository) BatchSave(
 
 	batchShortURLs := make([]*models.ShortURL, 0, len(urls))
 
-	buf := bytes.NewBuffer(nil)
-	encoder := json.NewEncoder(buf)
-	encoder.SetEscapeHTML(false)
+	userShortURLs, ok := f.userShortURLs[userID]
 
-	for i, url := range urls {
-		id := len(f.shortURLs) + i + 1
+	for _, url := range urls {
+		isFound := false
+
+		if ok {
+			for _, userShortURL := range userShortURLs {
+				if userShortURL.URL == url {
+					batchShortURLs = append(batchShortURLs, userShortURL)
+					isFound = true
+
+					break
+				}
+			}
+		}
+
+		if isFound {
+			continue
+		}
+
+		id := len(f.shortURLs) + 1
 		shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
 		batchShortURLs = append(batchShortURLs, shortURL)
 
-		err := encoder.Encode(shortURL)
+		err := f.encoder.Encode(shortURL)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+			log.Panic(err)
 		}
-	}
 
-	_, err := f.fileWriter.Write(buf.Bytes())
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
-	}
-
-	for _, shortURL := range batchShortURLs {
 		f.shortURLs[shortURL.UID] = shortURL
 		f.userShortURLs[shortURL.UserID] = append(f.userShortURLs[shortURL.UserID], shortURL)
 	}

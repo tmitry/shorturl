@@ -36,9 +36,10 @@ func NewDatabaseRepository(databaseCfg *configs.DatabaseConfig) *DatabaseReposit
 		log.Panic(err)
 	}
 
-	insertStmt, err := database.Prepare(
-		"INSERT INTO short_url(url, uid, user_id) VALUES($1, '', $2) RETURNING id",
-	)
+	insertStmt, err := database.Prepare(`
+INSERT INTO short_url(url, uid, user_id) VALUES($1, '', $2) 
+ON CONFLICT(user_id, url) DO UPDATE SET url=EXCLUDED.url RETURNING id, uid
+`)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -139,20 +140,24 @@ func (d DatabaseRepository) Save(
 		}
 	}(transaction)
 
-	identifier := 0
+	shortURL := models.NewShortURL(0, url, "", userID)
 
 	insertTxStmt := transaction.StmtContext(ctx, d.insertStmt)
 
-	row := insertTxStmt.QueryRowContext(ctx, url, userID)
+	row := insertTxStmt.QueryRowContext(ctx, shortURL.URL, shortURL.UserID)
 	if row.Err() != nil {
 		return nil, fmt.Errorf("%s: %w", messageFailedToSave, row.Err())
 	}
 
-	if err := row.Scan(&identifier); err != nil {
+	if err := row.Scan(&shortURL.ID, &shortURL.UID); err != nil {
 		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
 	}
 
-	shortURL := models.NewShortURL(identifier, url, models.NewUID(identifier, hashMinLength, hashSalt), userID)
+	if shortURL.UID != "" {
+		return shortURL, ErrDuplicate
+	}
+
+	shortURL.UID = models.NewUID(shortURL.ID, hashMinLength, hashSalt)
 
 	updateTxStmt := transaction.StmtContext(ctx, d.updateStmt)
 
@@ -190,20 +195,26 @@ func (d DatabaseRepository) BatchSave(
 	batchShortURLs := make([]*models.ShortURL, 0, len(urls))
 
 	for _, url := range urls {
-		identifier := 0
+		shortURL := models.NewShortURL(0, url, "", userID)
 
 		insertTxStmt := transaction.StmtContext(ctx, d.insertStmt)
 
-		row := insertTxStmt.QueryRowContext(ctx, url, userID)
+		row := insertTxStmt.QueryRowContext(ctx, shortURL.URL, shortURL.UserID)
 		if row.Err() != nil {
 			return nil, fmt.Errorf("%s: %w", messageFailedToSave, row.Err())
 		}
 
-		if err := row.Scan(&identifier); err != nil {
+		if err := row.Scan(&shortURL.ID, &shortURL.UID); err != nil {
 			return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
 		}
 
-		shortURL := models.NewShortURL(identifier, url, models.NewUID(identifier, hashMinLength, hashSalt), userID)
+		if shortURL.UID != "" {
+			batchShortURLs = append(batchShortURLs, shortURL)
+
+			continue
+		}
+
+		shortURL.UID = models.NewUID(shortURL.ID, hashMinLength, hashSalt)
 
 		updateTxStmt := transaction.StmtContext(ctx, d.updateStmt)
 
@@ -241,7 +252,7 @@ CREATE TABLE IF NOT EXISTS short_url (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS short_url_uid_idx ON short_url (uid);
-CREATE INDEX IF NOT EXISTS short_url_user_id_idx ON short_url (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS short_url_user_id_url_idx ON short_url (user_id, url);
 `
 
 	if _, err := d.db.Exec(query); err != nil {

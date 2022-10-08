@@ -79,6 +79,28 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 	json4, err := json.Marshal(handlers.NewShortenResponseJSON(shortURL4.GetShortURL(cfg4.Server.BaseURL)))
 	require.NoError(t, err)
 
+	// test case 4
+	cfg5 := configs.NewDefaultConfig()
+	cfg5.App.HashMinLength = 5
+	cfg5.App.HashSalt = "hash-salt"
+	cfg5.Server.BaseURL = "base-url"
+	rep5 := mocks.NewMockRepository(ctrl)
+	url5 := "https://example-site.com/conflict"
+	body5 := fmt.Sprintf(`{"url":"%s"}`, url5)
+	userID5 := uuid.New()
+	uid5 := models.UID("SdfGfs")
+	shortURL5 := models.NewShortURL(1, models.URL(url5), uid5, userID5)
+	rep5.EXPECT().Save(
+		gomock.Any(),
+		models.URL(url5),
+		userID5,
+		cfg5.App.HashMinLength,
+		cfg5.App.HashSalt,
+	).Return(shortURL5, repositories.ErrDuplicate)
+
+	json5, err := json.Marshal(handlers.NewShortenResponseJSON(shortURL5.GetShortURL(cfg5.Server.BaseURL)))
+	require.NoError(t, err)
+
 	tests := []struct {
 		name     string
 		fields   fields
@@ -155,6 +177,23 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 				statusCode:  http.StatusCreated,
 				contentType: handlers.ContentTypeJSON,
 				body:        string(json4),
+			},
+		},
+		{
+			name: "test case 5: conflict",
+			fields: fields{
+				Cfg:              cfg5,
+				Rep:              rep5,
+				ContextKeyUserID: "USERID",
+			},
+			request: request{
+				body:   body5,
+				userID: userID5,
+			},
+			response: response{
+				statusCode:  http.StatusConflict,
+				contentType: handlers.ContentTypeJSON,
+				body:        string(json5),
 			},
 		},
 	}

@@ -131,16 +131,22 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 		return
 	}
 
+	statusCode := http.StatusCreated
+
 	shortURL, err := h.Rep.Save(request.Context(), requestJSON.URL, userID, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt)
 	if err != nil {
-		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		log.Println(err.Error())
+		if !errors.Is(err, repositories.ErrDuplicate) {
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			log.Println(err.Error())
 
-		return
+			return
+		}
+
+		statusCode = http.StatusConflict
 	}
 
 	writer.Header().Set("Content-Type", ContentTypeJSON)
-	writer.WriteHeader(http.StatusCreated)
+	writer.WriteHeader(statusCode)
 
 	responseJSON := NewShortenResponseJSON(shortURL.GetShortURL(h.Cfg.Server.BaseURL))
 

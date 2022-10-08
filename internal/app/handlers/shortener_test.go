@@ -73,6 +73,23 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 		cfg3.App.HashSalt,
 	).Return(shortURL3, nil)
 
+	// test case 4
+	cfg4 := configs.NewDefaultConfig()
+	cfg4.App.HashMinLength = 3
+	cfg4.App.HashSalt = "hash-abc"
+	cfg4.Server.BaseURL = "localhost-url"
+	rep4 := mocks.NewMockRepository(ctrl)
+	url4 := "https://example.com/conflict"
+	userID4 := uuid.New()
+	shortURL4 := models.NewShortURL(1, models.URL(url4), "uid", userID4)
+	rep4.EXPECT().Save(
+		gomock.Any(),
+		models.URL(url4),
+		userID4,
+		cfg4.App.HashMinLength,
+		cfg4.App.HashSalt,
+	).Return(shortURL4, repositories.ErrDuplicate)
+
 	tests := []struct {
 		name     string
 		fields   fields
@@ -132,6 +149,23 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 				statusCode:  http.StatusCreated,
 				contentType: handlers.ContentTypeText,
 				body:        string(shortURL3.GetShortURL(cfg3.Server.BaseURL)),
+			},
+		},
+		{
+			name: "test case 4: conflict",
+			fields: fields{
+				Cfg:              cfg4,
+				Rep:              rep4,
+				ContextKeyUserID: "userID",
+			},
+			request: request{
+				body:   url4,
+				userID: userID4,
+			},
+			response: response{
+				statusCode:  http.StatusConflict,
+				contentType: handlers.ContentTypeText,
+				body:        string(shortURL4.GetShortURL(cfg4.Server.BaseURL)),
 			},
 		},
 	}

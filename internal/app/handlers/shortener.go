@@ -78,16 +78,22 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	statusCode := http.StatusCreated
+
 	shortURL, err := h.Rep.Save(request.Context(), url, userID, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt)
 	if err != nil {
-		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		log.Println(err.Error())
+		if !errors.Is(err, repositories.ErrDuplicate) {
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			log.Println(err.Error())
 
-		return
+			return
+		}
+
+		statusCode = http.StatusConflict
 	}
 
 	writer.Header().Set("Content-Type", ContentTypeText)
-	writer.WriteHeader(http.StatusCreated)
+	writer.WriteHeader(statusCode)
 
 	_, err = writer.Write([]byte(shortURL.GetShortURL(h.Cfg.Server.BaseURL)))
 	if err != nil {

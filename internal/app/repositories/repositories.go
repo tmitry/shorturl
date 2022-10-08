@@ -15,7 +15,10 @@ const (
 	messageFailedToCreateDatabase = "failed to create database"
 )
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound  = errors.New("not found")
+	ErrDuplicate = errors.New("duplicate")
+)
 
 type Repository interface {
 	FindOneByUID(ctx context.Context, uid models.UID) (*models.ShortURL, error)

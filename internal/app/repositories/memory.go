@@ -56,6 +56,15 @@ func (m *MemoryRepository) Save(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	userShortURLs, ok := m.userShortURLs[userID]
+	if ok {
+		for _, userShortURL := range userShortURLs {
+			if userShortURL.URL == url {
+				return userShortURL, ErrDuplicate
+			}
+		}
+	}
+
 	id := len(m.shortURLs) + 1
 
 	shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
@@ -78,7 +87,26 @@ func (m *MemoryRepository) BatchSave(
 
 	batchShortURLs := make([]*models.ShortURL, 0, len(urls))
 
+	userShortURLs, ok := m.userShortURLs[userID]
+
 	for _, url := range urls {
+		isFound := false
+
+		if ok {
+			for _, userShortURL := range userShortURLs {
+				if userShortURL.URL == url {
+					batchShortURLs = append(batchShortURLs, userShortURL)
+					isFound = true
+
+					break
+				}
+			}
+		}
+
+		if isFound {
+			continue
+		}
+
 		id := len(m.shortURLs) + 1
 		shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
 		batchShortURLs = append(batchShortURLs, shortURL)
