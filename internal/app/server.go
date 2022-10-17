@@ -11,8 +11,8 @@ import (
 	"github.com/tmitry/shorturl/internal/app/configs"
 	"github.com/tmitry/shorturl/internal/app/handlers"
 	"github.com/tmitry/shorturl/internal/app/middlewares"
-	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
+	"github.com/tmitry/shorturl/internal/app/utils"
 )
 
 const (
@@ -37,8 +37,10 @@ func NewRouter(cfg *configs.Config) http.Handler {
 		rep = repositories.NewMemoryRepository()
 	}
 
-	shortenerHandler := handlers.NewShortenerHandler(cfg, rep, ContextKeyUserID)
-	shortenerAPIHandler := handlers.NewShortenerAPIHandler(cfg, rep, ContextKeyUserID)
+	uidGenerator := utils.NewHashidsUIDGenerator(cfg.App.HashMinLength, cfg.App.HashSalt)
+
+	shortenerHandler := handlers.NewShortenerHandler(cfg, uidGenerator, rep, ContextKeyUserID)
+	shortenerAPIHandler := handlers.NewShortenerAPIHandler(cfg, uidGenerator, rep, ContextKeyUserID)
 
 	router.Route("/", func(router chi.Router) {
 		router.Use(middleware.AllowContentType(handlers.ContentTypeText, handlers.ContentTypeGZIP))
@@ -47,7 +49,7 @@ func NewRouter(cfg *configs.Config) http.Handler {
 		router.Get(fmt.Sprintf(
 			"/{%s:%s}",
 			handlers.ParameterNameUID,
-			models.GetPatternUID(cfg.App.HashMinLength),
+			uidGenerator.GetPattern(),
 		), shortenerHandler.Redirect)
 		router.Get("/ping", shortenerHandler.Ping)
 	})
@@ -57,6 +59,7 @@ func NewRouter(cfg *configs.Config) http.Handler {
 		router.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
 		router.Post("/shorten", shortenerAPIHandler.Shorten)
 		router.Get("/user/urls", shortenerAPIHandler.UserUrls)
+		router.Post("/shorten/batch", shortenerAPIHandler.ShortenBatch)
 	})
 
 	return router

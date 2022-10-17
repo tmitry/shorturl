@@ -14,6 +14,7 @@ import (
 	"github.com/tmitry/shorturl/internal/app/middlewares"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
+	"github.com/tmitry/shorturl/internal/app/utils"
 )
 
 type shortenRequestJSON struct {
@@ -50,26 +51,52 @@ func NewUserUrlsResponseJSON(userShortURLs []*models.ShortURL, baseURL string) i
 	return &response
 }
 
+type shortenBatchItemRequestJSON struct {
+	CorrelationID string     `json:"correlation_id"`
+	OriginalURL   models.URL `json:"original_url"`
+}
+
+type ShortenBatchRequestJSON []shortenBatchItemRequestJSON
+
+func NewShortenBatchResponseJSON(shortURLs []*models.ShortURL, correlationIDs []string, baseURL string) interface{} {
+	response := make([]struct {
+		CorrelationID string     `json:"correlation_id"`
+		ShortURL      models.URL `json:"short_url"`
+	}, 0, len(shortURLs))
+
+	for index, userShortURL := range shortURLs {
+		response = append(response, struct {
+			CorrelationID string     `json:"correlation_id"`
+			ShortURL      models.URL `json:"short_url"`
+		}{CorrelationID: correlationIDs[index], ShortURL: userShortURL.GetShortURL(baseURL)})
+	}
+
+	return &response
+}
+
 type ShortenerAPIHandler struct {
-	Cfg              *configs.Config
-	Rep              repositories.Repository
-	ContextKeyUserID middlewares.ContextKey
+	cfg              *configs.Config
+	uidGenerator     utils.UIDGenerator
+	rep              repositories.Repository
+	contextKeyUserID middlewares.ContextKey
 }
 
 func NewShortenerAPIHandler(
 	cfg *configs.Config,
+	uidGenerator utils.UIDGenerator,
 	rep repositories.Repository,
 	contextKeyUserID middlewares.ContextKey,
 ) *ShortenerAPIHandler {
 	return &ShortenerAPIHandler{
-		Cfg:              cfg,
-		Rep:              rep,
-		ContextKeyUserID: contextKeyUserID,
+		cfg:              cfg,
+		uidGenerator:     uidGenerator,
+		rep:              rep,
+		contextKeyUserID: contextKeyUserID,
 	}
 }
 
 func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.Request) {
-	userID, ok := request.Context().Value(h.ContextKeyUserID).(uuid.UUID)
+	userID, ok := request.Context().Value(h.contextKeyUserID).(uuid.UUID)
 	if !ok {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(MessageIncorrectUserID)
@@ -108,7 +135,9 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	shortURL, err := h.Rep.Save(request.Context(), requestJSON.URL, userID, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt)
+	statusCode := http.StatusCreated
+
+	uid, err := h.uidGenerator.Generate()
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
@@ -116,10 +145,23 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	writer.Header().Set("Content-Type", ContentTypeJSON)
-	writer.WriteHeader(http.StatusCreated)
+	shortURL := models.NewShortURL(0, requestJSON.URL, uid, userID)
 
-	responseJSON := NewShortenResponseJSON(shortURL.GetShortURL(h.Cfg.Server.BaseURL))
+	if err := h.rep.Save(request.Context(), shortURL); err != nil {
+		if !errors.Is(err, repositories.ErrURLDuplicate) {
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			log.Println(err.Error())
+
+			return
+		}
+
+		statusCode = http.StatusConflict
+	}
+
+	writer.Header().Set("Content-Type", ContentTypeJSON)
+	writer.WriteHeader(statusCode)
+
+	responseJSON := NewShortenResponseJSON(shortURL.GetShortURL(h.cfg.Server.BaseURL))
 
 	var buf bytes.Buffer
 	jsonEncoder := json.NewEncoder(&buf)
@@ -143,7 +185,7 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 }
 
 func (h ShortenerAPIHandler) UserUrls(writer http.ResponseWriter, request *http.Request) {
-	userID, ok := request.Context().Value(h.ContextKeyUserID).(uuid.UUID)
+	userID, ok := request.Context().Value(h.contextKeyUserID).(uuid.UUID)
 	if !ok {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(MessageIncorrectUserID)
@@ -151,7 +193,7 @@ func (h ShortenerAPIHandler) UserUrls(writer http.ResponseWriter, request *http.
 		return
 	}
 
-	userShortURLs, err := h.Rep.FindAllByUserID(request.Context(), userID)
+	userShortURLs, err := h.rep.FindAllByUserID(request.Context(), userID)
 	if err != nil {
 		if errors.Is(err, repositories.ErrNotFound) {
 			http.Error(writer, http.StatusText(http.StatusNoContent), http.StatusNoContent)
@@ -167,7 +209,100 @@ func (h ShortenerAPIHandler) UserUrls(writer http.ResponseWriter, request *http.
 
 	writer.Header().Set("Content-Type", ContentTypeJSON)
 
-	responseJSON := NewUserUrlsResponseJSON(userShortURLs, h.Cfg.Server.BaseURL)
+	responseJSON := NewUserUrlsResponseJSON(userShortURLs, h.cfg.Server.BaseURL)
+
+	var buf bytes.Buffer
+	jsonEncoder := json.NewEncoder(&buf)
+	jsonEncoder.SetEscapeHTML(false)
+
+	err = jsonEncoder.Encode(responseJSON)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
+
+	_, err = buf.WriteTo(writer)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
+}
+
+func (h ShortenerAPIHandler) ShortenBatch(writer http.ResponseWriter, request *http.Request) {
+	userID, ok := request.Context().Value(h.contextKeyUserID).(uuid.UUID)
+	if !ok {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(MessageIncorrectUserID)
+
+		return
+	}
+
+	reader, err := getRequestReader(request)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
+
+	defer func(reader io.ReadCloser) {
+		err := reader.Close()
+		if err != nil {
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			log.Println(err.Error())
+		}
+	}(reader)
+
+	var requestJSON ShortenBatchRequestJSON
+
+	if err := json.NewDecoder(reader).Decode(&requestJSON); err != nil {
+		http.Error(writer, fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectJSON),
+			http.StatusBadRequest)
+
+		return
+	}
+
+	shortURLs := make([]*models.ShortURL, 0, len(requestJSON))
+	correlationIDs := make([]string, 0, len(requestJSON))
+
+	for _, item := range requestJSON {
+		if !item.OriginalURL.IsValid() {
+			http.Error(writer, fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectURL),
+				http.StatusBadRequest)
+
+			return
+		}
+
+		uid, err := h.uidGenerator.Generate()
+		if err != nil {
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			log.Println(err.Error())
+
+			return
+		}
+
+		shortURL := models.NewShortURL(0, item.OriginalURL, uid, userID)
+
+		shortURLs = append(shortURLs, shortURL)
+		correlationIDs = append(correlationIDs, item.CorrelationID)
+	}
+
+	err = h.rep.BatchSave(request.Context(), shortURLs)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
+
+	writer.Header().Set("Content-Type", ContentTypeJSON)
+	writer.WriteHeader(http.StatusCreated)
+
+	responseJSON := NewShortenBatchResponseJSON(shortURLs, correlationIDs, h.cfg.Server.BaseURL)
 
 	var buf bytes.Buffer
 	jsonEncoder := json.NewEncoder(&buf)

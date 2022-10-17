@@ -46,24 +46,55 @@ func (m *MemoryRepository) FindAllByUserID(_ context.Context, userID uuid.UUID) 
 	return userShortURLs, nil
 }
 
-func (m *MemoryRepository) Save(
-	_ context.Context,
-	url models.URL,
-	userID uuid.UUID,
-	hashMinLength int,
-	hashSalt string,
-) (*models.ShortURL, error) {
+func (m *MemoryRepository) Save(_ context.Context, shortURL *models.ShortURL) error {
+	userShortURLs, ok := m.userShortURLs[shortURL.UserID]
+	if ok {
+		for _, userShortURL := range userShortURLs {
+			if userShortURL.URL == shortURL.URL {
+				*shortURL = *userShortURL
+
+				return ErrURLDuplicate
+			}
+		}
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	id := len(m.shortURLs) + 1
-
-	shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
 
 	m.shortURLs[shortURL.UID] = shortURL
 	m.userShortURLs[shortURL.UserID] = append(m.userShortURLs[shortURL.UserID], shortURL)
 
-	return shortURL, nil
+	return nil
+}
+
+func (m *MemoryRepository) BatchSave(_ context.Context, shortURLs []*models.ShortURL) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, shortURL := range shortURLs {
+		isFound := false
+
+		userShortURLs, ok := m.userShortURLs[shortURL.UserID]
+		if ok {
+			for _, userShortURL := range userShortURLs {
+				if userShortURL.URL == shortURL.URL {
+					*shortURL = *userShortURL
+					isFound = true
+
+					break
+				}
+			}
+		}
+
+		if isFound {
+			continue
+		}
+
+		m.shortURLs[shortURL.UID] = shortURL
+		m.userShortURLs[shortURL.UserID] = append(m.userShortURLs[shortURL.UserID], shortURL)
+	}
+
+	return nil
 }
 
 func (m *MemoryRepository) Ping(_ context.Context) error {
