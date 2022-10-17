@@ -13,6 +13,7 @@ import (
 	"github.com/tmitry/shorturl/internal/app/middlewares"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
+	"github.com/tmitry/shorturl/internal/app/utils"
 )
 
 const (
@@ -20,25 +21,28 @@ const (
 )
 
 type ShortenerHandler struct {
-	Cfg              *configs.Config
-	Rep              repositories.Repository
-	ContextKeyUserID middlewares.ContextKey
+	cfg              *configs.Config
+	uidGenerator     utils.UIDGenerator
+	rep              repositories.Repository
+	contextKeyUserID middlewares.ContextKey
 }
 
 func NewShortenerHandler(
 	cfg *configs.Config,
+	uidGenerator utils.UIDGenerator,
 	rep repositories.Repository,
 	contextKeyUserID middlewares.ContextKey,
 ) *ShortenerHandler {
 	return &ShortenerHandler{
-		Cfg:              cfg,
-		Rep:              rep,
-		ContextKeyUserID: contextKeyUserID,
+		cfg:              cfg,
+		uidGenerator:     uidGenerator,
+		rep:              rep,
+		contextKeyUserID: contextKeyUserID,
 	}
 }
 
 func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Request) {
-	userID, ok := request.Context().Value(h.ContextKeyUserID).(uuid.UUID)
+	userID, ok := request.Context().Value(h.contextKeyUserID).(uuid.UUID)
 	if !ok {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(MessageIncorrectUserID)
@@ -80,9 +84,19 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 
 	statusCode := http.StatusCreated
 
-	shortURL, err := h.Rep.Save(request.Context(), url, userID, h.Cfg.App.HashMinLength, h.Cfg.App.HashSalt)
+	uid, err := h.uidGenerator.Generate()
 	if err != nil {
-		if !errors.Is(err, repositories.ErrDuplicate) {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
+
+	shortURL := models.NewShortURL(0, url, uid, userID)
+
+	err = h.rep.Save(request.Context(), shortURL)
+	if err != nil {
+		if !errors.Is(err, repositories.ErrURLDuplicate) {
 			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			log.Println(err.Error())
 
@@ -95,7 +109,7 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 	writer.Header().Set("Content-Type", ContentTypeText)
 	writer.WriteHeader(statusCode)
 
-	_, err = writer.Write([]byte(shortURL.GetShortURL(h.Cfg.Server.BaseURL)))
+	_, err = writer.Write([]byte(shortURL.GetShortURL(h.cfg.Server.BaseURL)))
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
@@ -107,7 +121,7 @@ func (h ShortenerHandler) Shorten(writer http.ResponseWriter, request *http.Requ
 func (h ShortenerHandler) Redirect(writer http.ResponseWriter, request *http.Request) {
 	uid := models.UID(chi.URLParam(request, ParameterNameUID))
 
-	isValid, err := uid.IsValid(h.Cfg.App.HashMinLength)
+	isValid, err := h.uidGenerator.IsValid(uid)
 	if err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
@@ -125,7 +139,7 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	shortURL, err := h.Rep.FindOneByUID(request.Context(), uid)
+	shortURL, err := h.rep.FindOneByUID(request.Context(), uid)
 	if err != nil {
 		if errors.Is(err, repositories.ErrNotFound) {
 			http.Error(
@@ -149,7 +163,7 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, request *http.Req
 }
 
 func (h ShortenerHandler) Ping(writer http.ResponseWriter, request *http.Request) {
-	if err := h.Rep.Ping(request.Context()); err != nil {
+	if err := h.rep.Ping(request.Context()); err != nil {
 		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		log.Println(err.Error())
 

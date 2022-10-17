@@ -37,18 +37,17 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 }
 
 // BatchSave mocks base method.
-func (m *MockRepository) BatchSave(arg0 context.Context, arg1 []models.URL, arg2 uuid.UUID, arg3 int, arg4 string) ([]*models.ShortURL, error) {
+func (m *MockRepository) BatchSave(arg0 context.Context, arg1 []*models.ShortURL) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BatchSave", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].([]*models.ShortURL)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "BatchSave", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // BatchSave indicates an expected call of BatchSave.
-func (mr *MockRepositoryMockRecorder) BatchSave(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) BatchSave(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchSave", reflect.TypeOf((*MockRepository)(nil).BatchSave), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchSave", reflect.TypeOf((*MockRepository)(nil).BatchSave), arg0, arg1)
 }
 
 // FindAllByUserID mocks base method.
@@ -96,16 +95,15 @@ func (mr *MockRepositoryMockRecorder) Ping(arg0 interface{}) *gomock.Call {
 }
 
 // Save mocks base method.
-func (m *MockRepository) Save(arg0 context.Context, arg1 models.URL, arg2 uuid.UUID, arg3 int, arg4 string) (*models.ShortURL, error) {
+func (m *MockRepository) Save(arg0 context.Context, arg1 *models.ShortURL) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(*models.ShortURL)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "Save", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockRepositoryMockRecorder) Save(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) Save(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockRepository)(nil).Save), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockRepository)(nil).Save), arg0, arg1)
 }
