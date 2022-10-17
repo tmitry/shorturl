@@ -16,8 +16,8 @@ const (
 )
 
 var (
-	ErrNotFound  = errors.New("not found")
-	ErrDuplicate = errors.New("duplicate")
+	ErrNotFound     = errors.New("not found")
+	ErrURLDuplicate = errors.New("duplicate url")
 )
 
 type Repository interface {
@@ -25,21 +25,9 @@ type Repository interface {
 
 	FindAllByUserID(ctx context.Context, userID uuid.UUID) ([]*models.ShortURL, error)
 
-	Save(
-		ctx context.Context,
-		url models.URL,
-		userID uuid.UUID,
-		hashMinLength int,
-		hashSalt string,
-	) (*models.ShortURL, error)
+	Save(ctx context.Context, shortURL *models.ShortURL) error
 
-	BatchSave(
-		ctx context.Context,
-		urls []models.URL,
-		userID uuid.UUID,
-		hashMinLength int,
-		hashSalt string,
-	) ([]*models.ShortURL, error)
+	BatchSave(ctx context.Context, shortURLs []*models.ShortURL) error
 
 	Ping(ctx context.Context) error
 }

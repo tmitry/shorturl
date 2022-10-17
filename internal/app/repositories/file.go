@@ -102,61 +102,44 @@ func (f *FileRepository) FindAllByUserID(_ context.Context, userID uuid.UUID) ([
 	return userShortURLs, nil
 }
 
-func (f *FileRepository) Save(
-	_ context.Context,
-	url models.URL,
-	userID uuid.UUID,
-	hashMinLength int,
-	hashSalt string,
-) (*models.ShortURL, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	userShortURLs, ok := f.userShortURLs[userID]
+func (f *FileRepository) Save(_ context.Context, shortURL *models.ShortURL) error {
+	userShortURLs, ok := f.userShortURLs[shortURL.UserID]
 	if ok {
 		for _, userShortURL := range userShortURLs {
-			if userShortURL.URL == url {
-				return userShortURL, ErrDuplicate
+			if userShortURL.URL == shortURL.URL {
+				*shortURL = *userShortURL
+
+				return ErrURLDuplicate
 			}
 		}
 	}
 
-	id := len(f.shortURLs) + 1
-
-	shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
-
 	err := f.encoder.Encode(shortURL)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+		return fmt.Errorf("%s: %w", messageFailedToSave, err)
 	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	f.shortURLs[shortURL.UID] = shortURL
 	f.userShortURLs[shortURL.UserID] = append(f.userShortURLs[shortURL.UserID], shortURL)
 
-	return shortURL, nil
+	return nil
 }
 
-func (f *FileRepository) BatchSave(
-	_ context.Context,
-	urls []models.URL,
-	userID uuid.UUID,
-	hashMinLength int,
-	hashSalt string,
-) ([]*models.ShortURL, error) {
+func (f *FileRepository) BatchSave(_ context.Context, shortURLs []*models.ShortURL) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	batchShortURLs := make([]*models.ShortURL, 0, len(urls))
-
-	userShortURLs, ok := f.userShortURLs[userID]
-
-	for _, url := range urls {
+	for _, shortURL := range shortURLs {
 		isFound := false
 
+		userShortURLs, ok := f.userShortURLs[shortURL.UserID]
 		if ok {
 			for _, userShortURL := range userShortURLs {
-				if userShortURL.URL == url {
-					batchShortURLs = append(batchShortURLs, userShortURL)
+				if userShortURL.URL == shortURL.URL {
+					*shortURL = *userShortURL
 					isFound = true
 
 					break
@@ -168,10 +151,6 @@ func (f *FileRepository) BatchSave(
 			continue
 		}
 
-		id := len(f.shortURLs) + 1
-		shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
-		batchShortURLs = append(batchShortURLs, shortURL)
-
 		err := f.encoder.Encode(shortURL)
 		if err != nil {
 			log.Panic(err)
@@ -181,7 +160,7 @@ func (f *FileRepository) BatchSave(
 		f.userShortURLs[shortURL.UserID] = append(f.userShortURLs[shortURL.UserID], shortURL)
 	}
 
-	return batchShortURLs, nil
+	return nil
 }
 
 func (f *FileRepository) Ping(_ context.Context) error {
