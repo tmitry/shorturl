@@ -1,7 +1,6 @@
 package repositories
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,7 +24,6 @@ type FileRepository struct {
 	mu            sync.RWMutex
 	shortURLs     map[models.UID]*models.ShortURL
 	userShortURLs map[uuid.UUID][]*models.ShortURL
-	fileWriter    *os.File
 	encoder       *json.Encoder
 }
 
@@ -46,7 +44,6 @@ func NewFileRepository(fileStoragePath string) *FileRepository {
 		mu:            sync.RWMutex{},
 		shortURLs:     map[models.UID]*models.ShortURL{},
 		userShortURLs: map[uuid.UUID][]*models.ShortURL{},
-		fileWriter:    fileWriter,
 		encoder:       encoder,
 	}
 
@@ -105,69 +102,65 @@ func (f *FileRepository) FindAllByUserID(_ context.Context, userID uuid.UUID) ([
 	return userShortURLs, nil
 }
 
-func (f *FileRepository) Save(
-	_ context.Context,
-	url models.URL,
-	userID uuid.UUID,
-	hashMinLength int,
-	hashSalt string,
-) (*models.ShortURL, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+func (f *FileRepository) Save(_ context.Context, shortURL *models.ShortURL) error {
+	userShortURLs, ok := f.userShortURLs[shortURL.UserID]
+	if ok {
+		for _, userShortURL := range userShortURLs {
+			if userShortURL.URL == shortURL.URL {
+				*shortURL = *userShortURL
 
-	id := len(f.shortURLs) + 1
-
-	shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
+				return ErrURLDuplicate
+			}
+		}
+	}
 
 	err := f.encoder.Encode(shortURL)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+		return fmt.Errorf("%s: %w", messageFailedToSave, err)
 	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	f.shortURLs[shortURL.UID] = shortURL
 	f.userShortURLs[shortURL.UserID] = append(f.userShortURLs[shortURL.UserID], shortURL)
 
-	return shortURL, nil
+	return nil
 }
 
-func (f *FileRepository) BatchSave(
-	_ context.Context,
-	urls []models.URL,
-	userID uuid.UUID,
-	hashMinLength int,
-	hashSalt string,
-) ([]*models.ShortURL, error) {
+func (f *FileRepository) BatchSave(_ context.Context, shortURLs []*models.ShortURL) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	batchShortURLs := make([]*models.ShortURL, 0, len(urls))
+	for _, shortURL := range shortURLs {
+		isFound := false
 
-	buf := bytes.NewBuffer(nil)
-	encoder := json.NewEncoder(buf)
-	encoder.SetEscapeHTML(false)
+		userShortURLs, ok := f.userShortURLs[shortURL.UserID]
+		if ok {
+			for _, userShortURL := range userShortURLs {
+				if userShortURL.URL == shortURL.URL {
+					*shortURL = *userShortURL
+					isFound = true
 
-	for i, url := range urls {
-		id := len(f.shortURLs) + i + 1
-		shortURL := models.NewShortURL(id, url, models.NewUID(id, hashMinLength, hashSalt), userID)
-		batchShortURLs = append(batchShortURLs, shortURL)
-
-		err := encoder.Encode(shortURL)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
+					break
+				}
+			}
 		}
-	}
 
-	_, err := f.fileWriter.Write(buf.Bytes())
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", messageFailedToSave, err)
-	}
+		if isFound {
+			continue
+		}
 
-	for _, shortURL := range batchShortURLs {
+		err := f.encoder.Encode(shortURL)
+		if err != nil {
+			log.Panic(err)
+		}
+
 		f.shortURLs[shortURL.UID] = shortURL
 		f.userShortURLs[shortURL.UserID] = append(f.userShortURLs[shortURL.UserID], shortURL)
 	}
 
-	return batchShortURLs, nil
+	return nil
 }
 
 func (f *FileRepository) Ping(_ context.Context) error {

@@ -21,17 +21,22 @@ import (
 	"github.com/tmitry/shorturl/internal/app/mocks"
 	"github.com/tmitry/shorturl/internal/app/models"
 	"github.com/tmitry/shorturl/internal/app/repositories"
+	"github.com/tmitry/shorturl/internal/app/utils"
 )
 
-var errFailedToPing = errors.New("failed to ping")
+var (
+	errFailedToPing     = errors.New("failed to ping")
+	errFailedToGenerate = errors.New("failed to generate")
+)
 
 func TestShortenerHandler_Shorten(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
-		Cfg              *configs.Config
-		Rep              repositories.Repository
-		ContextKeyUserID middlewares.ContextKey
+		cfg              *configs.Config
+		uidGenerator     utils.UIDGenerator
+		rep              repositories.Repository
+		contextKeyUserID middlewares.ContextKey
 	}
 
 	type request struct {
@@ -50,28 +55,55 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 
 	// test case 1
 	cfg1 := configs.NewDefaultConfig()
+	uidGenerator1 := mocks.NewMockUIDGenerator(ctrl)
 	rep1 := mocks.NewMockRepository(ctrl)
 
 	// test case 2
 	cfg2 := configs.NewDefaultConfig()
+	uidGenerator2 := mocks.NewMockUIDGenerator(ctrl)
 	rep2 := mocks.NewMockRepository(ctrl)
 
 	// test case 3
 	cfg3 := configs.NewDefaultConfig()
-	cfg3.App.HashMinLength = 3
-	cfg3.App.HashSalt = "abc"
-	cfg3.Server.BaseURL = "localhost"
+	uidGenerator3 := mocks.NewMockUIDGenerator(ctrl)
+	uidGenerator3.EXPECT().Generate().Return(
+		models.UID(""),
+		errFailedToGenerate,
+	)
+
 	rep3 := mocks.NewMockRepository(ctrl)
-	url3 := "https://example.com/"
-	userID3 := uuid.New()
-	shortURL3 := models.NewShortURL(1, models.URL(url3), "uid", userID3)
-	rep3.EXPECT().Save(
+
+	// test case 4
+	cfg4 := configs.NewDefaultConfig()
+	cfg4.Server.BaseURL = "localhost"
+	uid4 := models.UID("AzFsx")
+	uidGenerator4 := mocks.NewMockUIDGenerator(ctrl)
+	uidGenerator4.EXPECT().Generate().Return(uid4, nil)
+
+	rep4 := mocks.NewMockRepository(ctrl)
+	url4 := "https://example.com/"
+	userID4 := uuid.New()
+	shortURL4 := models.NewShortURL(0, models.URL(url4), uid4, userID4)
+	rep4.EXPECT().Save(
 		gomock.Any(),
-		models.URL(url3),
-		userID3,
-		cfg3.App.HashMinLength,
-		cfg3.App.HashSalt,
-	).Return(shortURL3, nil)
+		shortURL4,
+	).Return(nil)
+
+	// test case 5
+	cfg5 := configs.NewDefaultConfig()
+	cfg5.Server.BaseURL = "localhost-url"
+	uid5 := models.UID("AzFsx")
+	uidGenerator5 := mocks.NewMockUIDGenerator(ctrl)
+	uidGenerator5.EXPECT().Generate().Return(uid4, nil)
+
+	rep5 := mocks.NewMockRepository(ctrl)
+	url5 := "https://example.com/conflict"
+	userID5 := uuid.New()
+	shortURL5 := models.NewShortURL(0, models.URL(url5), uid5, userID5)
+	rep5.EXPECT().Save(
+		gomock.Any(),
+		shortURL5,
+	).Return(repositories.ErrURLDuplicate)
 
 	tests := []struct {
 		name     string
@@ -82,9 +114,10 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 		{
 			name: "test case 1: incorrect user id",
 			fields: fields{
-				Cfg:              cfg1,
-				Rep:              rep1,
-				ContextKeyUserID: "userID",
+				cfg:              cfg1,
+				uidGenerator:     uidGenerator1,
+				rep:              rep1,
+				contextKeyUserID: "userID",
 			},
 			request: request{
 				body:   "https://example.com/",
@@ -99,9 +132,10 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 		{
 			name: "test case 2: incorrect url",
 			fields: fields{
-				Cfg:              cfg2,
-				Rep:              rep2,
-				ContextKeyUserID: "userID",
+				cfg:              cfg2,
+				uidGenerator:     uidGenerator2,
+				rep:              rep2,
+				contextKeyUserID: "userID",
 			},
 			request: request{
 				body:   "bad url",
@@ -118,20 +152,57 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 			},
 		},
 		{
-			name: "test case 3: created",
+			name: "test case 3: error generate uid",
 			fields: fields{
-				Cfg:              cfg3,
-				Rep:              rep3,
-				ContextKeyUserID: "userID",
+				cfg:              cfg3,
+				uidGenerator:     uidGenerator3,
+				rep:              rep3,
+				contextKeyUserID: "userID",
 			},
 			request: request{
-				body:   url3,
-				userID: userID3,
+				body:   "https://example.com/",
+				userID: uuid.New(),
+			},
+			response: response{
+				statusCode:  http.StatusInternalServerError,
+				contentType: handlers.ContentTypeText,
+				body:        http.StatusText(http.StatusInternalServerError),
+			},
+		},
+		{
+			name: "test case 4: created",
+			fields: fields{
+				cfg:              cfg4,
+				uidGenerator:     uidGenerator4,
+				rep:              rep4,
+				contextKeyUserID: "userID",
+			},
+			request: request{
+				body:   url4,
+				userID: userID4,
 			},
 			response: response{
 				statusCode:  http.StatusCreated,
 				contentType: handlers.ContentTypeText,
-				body:        string(shortURL3.GetShortURL(cfg3.Server.BaseURL)),
+				body:        string(shortURL4.GetShortURL(cfg4.Server.BaseURL)),
+			},
+		},
+		{
+			name: "test case 5: conflict",
+			fields: fields{
+				cfg:              cfg5,
+				uidGenerator:     uidGenerator5,
+				rep:              rep5,
+				contextKeyUserID: "userID",
+			},
+			request: request{
+				body:   url5,
+				userID: userID5,
+			},
+			response: response{
+				statusCode:  http.StatusConflict,
+				contentType: handlers.ContentTypeText,
+				body:        string(shortURL5.GetShortURL(cfg5.Server.BaseURL)),
 			},
 		},
 	}
@@ -141,16 +212,17 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			shortenerHandler := handlers.ShortenerHandler{
-				Cfg:              testCase.fields.Cfg,
-				Rep:              testCase.fields.Rep,
-				ContextKeyUserID: testCase.fields.ContextKeyUserID,
-			}
+			shortenerHandler := handlers.NewShortenerHandler(
+				testCase.fields.cfg,
+				testCase.fields.uidGenerator,
+				testCase.fields.rep,
+				testCase.fields.contextKeyUserID,
+			)
 
 			requestShorten := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(testCase.request.body))
 			requestShorten = requestShorten.WithContext(context.WithValue(
 				requestShorten.Context(),
-				testCase.fields.ContextKeyUserID,
+				testCase.fields.contextKeyUserID,
 				testCase.request.userID,
 			))
 
@@ -178,8 +250,10 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
-		Cfg *configs.Config
-		Rep repositories.Repository
+		cfg              *configs.Config
+		uidGenerator     utils.UIDGenerator
+		rep              repositories.Repository
+		contextKeyUserID middlewares.ContextKey
 	}
 
 	type request struct {
@@ -198,21 +272,28 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 
 	// test case 1
 	cfg1 := configs.NewDefaultConfig()
-	cfg1.App.HashMinLength = 5
+	uid1 := models.UID("abc")
+	uidGenerator1 := mocks.NewMockUIDGenerator(ctrl)
+	uidGenerator1.EXPECT().IsValid(uid1).Return(false, nil)
+
 	rep1 := mocks.NewMockRepository(ctrl)
 
 	// test case 2
 	cfg2 := configs.NewDefaultConfig()
-	cfg2.App.HashMinLength = 6
-	rep2 := mocks.NewMockRepository(ctrl)
 	uid2 := models.UID("AbCdEF")
+	uidGenerator2 := mocks.NewMockUIDGenerator(ctrl)
+	uidGenerator2.EXPECT().IsValid(uid2).Return(true, nil)
+
+	rep2 := mocks.NewMockRepository(ctrl)
 	rep2.EXPECT().FindOneByUID(gomock.Any(), uid2).Return(nil, repositories.ErrNotFound)
 
 	// test case 3
 	cfg3 := configs.NewDefaultConfig()
-	cfg3.App.HashMinLength = 7
-	rep3 := mocks.NewMockRepository(ctrl)
 	uid3 := models.UID("AbCdEFg")
+	uidGenerator3 := mocks.NewMockUIDGenerator(ctrl)
+	uidGenerator3.EXPECT().IsValid(uid3).Return(true, nil)
+
+	rep3 := mocks.NewMockRepository(ctrl)
 	url3 := "https://example.com/"
 	shortURL3 := models.NewShortURL(1, models.URL(url3), uid3, uuid.New())
 	rep3.EXPECT().FindOneByUID(gomock.Any(), uid3).Return(shortURL3, nil)
@@ -226,11 +307,13 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		{
 			name: "test case 1: incorrect uid",
 			fields: fields{
-				Cfg: cfg1,
-				Rep: rep1,
+				cfg:              cfg1,
+				uidGenerator:     uidGenerator1,
+				rep:              rep1,
+				contextKeyUserID: "userID",
 			},
 			request: request{
-				uid: "abc",
+				uid: uid1.String(),
 			},
 			response: response{
 				statusCode:  http.StatusBadRequest,
@@ -246,8 +329,10 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		{
 			name: "test case 2: url not found",
 			fields: fields{
-				Cfg: cfg2,
-				Rep: rep2,
+				cfg:              cfg2,
+				uidGenerator:     uidGenerator2,
+				rep:              rep2,
+				contextKeyUserID: "userID",
 			},
 			request: request{
 				uid: uid2.String(),
@@ -266,8 +351,10 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		{
 			name: "test case 3: redirect",
 			fields: fields{
-				Cfg: cfg3,
-				Rep: rep3,
+				cfg:              cfg3,
+				uidGenerator:     uidGenerator3,
+				rep:              rep3,
+				contextKeyUserID: "userID",
 			},
 			request: request{
 				uid: uid3.String(),
@@ -285,11 +372,12 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			handler := handlers.ShortenerHandler{
-				Cfg:              testCase.fields.Cfg,
-				Rep:              testCase.fields.Rep,
-				ContextKeyUserID: "",
-			}
+			handler := handlers.NewShortenerHandler(
+				testCase.fields.cfg,
+				testCase.fields.uidGenerator,
+				testCase.fields.rep,
+				testCase.fields.contextKeyUserID,
+			)
 
 			request := httptest.NewRequest(http.MethodGet, "/", nil)
 			routeCtx := chi.NewRouteContext()
@@ -318,8 +406,9 @@ func TestShortenerHandler_Ping(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
-		Cfg *configs.Config
-		Rep repositories.Repository
+		cfg          *configs.Config
+		uidGenerator utils.UIDGenerator
+		rep          repositories.Repository
 	}
 
 	type response struct {
@@ -333,11 +422,13 @@ func TestShortenerHandler_Ping(t *testing.T) {
 
 	// test case 1
 	cfg1 := configs.NewDefaultConfig()
+	uidGenerator1 := mocks.NewMockUIDGenerator(ctrl)
 	rep1 := mocks.NewMockRepository(ctrl)
 	rep1.EXPECT().Ping(gomock.Any()).Return(errFailedToPing)
 
 	// test case 2
 	cfg2 := configs.NewDefaultConfig()
+	uidGenerator2 := mocks.NewMockUIDGenerator(ctrl)
 	rep2 := mocks.NewMockRepository(ctrl)
 	rep2.EXPECT().Ping(gomock.Any()).Return(nil)
 
@@ -349,8 +440,9 @@ func TestShortenerHandler_Ping(t *testing.T) {
 		{
 			name: "test case 1: failed to ping",
 			fields: fields{
-				Cfg: cfg1,
-				Rep: rep1,
+				cfg:          cfg1,
+				uidGenerator: uidGenerator1,
+				rep:          rep1,
 			},
 			response: response{
 				statusCode:  http.StatusInternalServerError,
@@ -361,8 +453,9 @@ func TestShortenerHandler_Ping(t *testing.T) {
 		{
 			name: "test case 2: ok",
 			fields: fields{
-				Cfg: cfg2,
-				Rep: rep2,
+				cfg:          cfg2,
+				uidGenerator: uidGenerator2,
+				rep:          rep2,
 			},
 			response: response{
 				statusCode:  http.StatusOK,
@@ -376,11 +469,12 @@ func TestShortenerHandler_Ping(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			handler := handlers.ShortenerHandler{
-				Cfg:              testCase.fields.Cfg,
-				Rep:              testCase.fields.Rep,
-				ContextKeyUserID: "",
-			}
+			handler := handlers.NewShortenerHandler(
+				testCase.fields.cfg,
+				testCase.fields.uidGenerator,
+				testCase.fields.rep,
+				"",
+			)
 
 			request := httptest.NewRequest(http.MethodGet, "/ping", nil)
 

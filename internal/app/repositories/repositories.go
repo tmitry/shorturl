@@ -15,28 +15,19 @@ const (
 	messageFailedToCreateDatabase = "failed to create database"
 )
 
-var ErrNotFound = errors.New("not found")
+var (
+	ErrNotFound     = errors.New("not found")
+	ErrURLDuplicate = errors.New("duplicate url")
+)
 
 type Repository interface {
 	FindOneByUID(ctx context.Context, uid models.UID) (*models.ShortURL, error)
 
 	FindAllByUserID(ctx context.Context, userID uuid.UUID) ([]*models.ShortURL, error)
 
-	Save(
-		ctx context.Context,
-		url models.URL,
-		userID uuid.UUID,
-		hashMinLength int,
-		hashSalt string,
-	) (*models.ShortURL, error)
+	Save(ctx context.Context, shortURL *models.ShortURL) error
 
-	BatchSave(
-		ctx context.Context,
-		urls []models.URL,
-		userID uuid.UUID,
-		hashMinLength int,
-		hashSalt string,
-	) ([]*models.ShortURL, error)
+	BatchSave(ctx context.Context, shortURLs []*models.ShortURL) error
 
 	Ping(ctx context.Context) error
 }
