@@ -157,6 +157,16 @@ func (h ShortenerHandler) Redirect(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
+	if shortURL.IsDeleted {
+		http.Error(
+			writer,
+			fmt.Sprintf("%s: %s", http.StatusText(http.StatusGone), MessageURLWasDeleted),
+			http.StatusGone,
+		)
+
+		return
+	}
+
 	writer.Header().Set("Location", shortURL.URL.String())
 	writer.Header().Set("Content-Type", ContentTypeText)
 	writer.WriteHeader(http.StatusTemporaryRedirect)

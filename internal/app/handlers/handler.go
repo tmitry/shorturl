@@ -14,6 +14,7 @@ const (
 	MessageURLNotFound     = "URL not found"
 	MessageIncorrectJSON   = "incorrect JSON"
 	MessageIncorrectUserID = "incorrect user ID"
+	MessageURLWasDeleted   = "URL was deleted"
 
 	ContentTypeText = "text/plain"
 	ContentTypeJSON = "application/json"

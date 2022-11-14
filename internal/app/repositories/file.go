@@ -103,6 +103,9 @@ func (f *FileRepository) FindAllByUserID(_ context.Context, userID uuid.UUID) ([
 }
 
 func (f *FileRepository) Save(_ context.Context, shortURL *models.ShortURL) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	userShortURLs, ok := f.userShortURLs[shortURL.UserID]
 	if ok {
 		for _, userShortURL := range userShortURLs {
@@ -118,9 +121,6 @@ func (f *FileRepository) Save(_ context.Context, shortURL *models.ShortURL) erro
 	if err != nil {
 		return fmt.Errorf("%s: %w", messageFailedToSave, err)
 	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	f.shortURLs[shortURL.UID] = shortURL
 	f.userShortURLs[shortURL.UserID] = append(f.userShortURLs[shortURL.UserID], shortURL)
@@ -161,6 +161,43 @@ func (f *FileRepository) BatchSave(_ context.Context, shortURLs []*models.ShortU
 	}
 
 	return nil
+}
+
+func (f *FileRepository) BatchDelete(_ context.Context, shortURLs []*models.ShortURL) error {
+	if len(shortURLs) == 0 {
+		return ErrNothingToDelete
+	}
+
+	// not implemented
+	for _, shortURL := range shortURLs {
+		shortURL.IsDeleted = true
+	}
+
+	return nil
+}
+
+func (f *FileRepository) FindAllByUserIDAndUIDs(
+	_ context.Context,
+	userID uuid.UUID,
+	uids []models.UID,
+) ([]*models.ShortURL, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	var shortURLs []*models.ShortURL
+
+	for _, uid := range uids {
+		shortURL, ok := f.shortURLs[uid]
+		if ok && shortURL.UserID == userID {
+			shortURLs = append(shortURLs, shortURL)
+		}
+	}
+
+	if len(shortURLs) == 0 {
+		return nil, ErrNotFound
+	}
+
+	return shortURLs, nil
 }
 
 func (f *FileRepository) Ping(_ context.Context) error {

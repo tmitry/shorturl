@@ -13,11 +13,13 @@ const (
 	messageFailedToFind           = "failed to find"
 	messageFailedToPing           = "failed to ping"
 	messageFailedToCreateDatabase = "failed to create database"
+	messageFailedToDelete         = "failed to delete"
 )
 
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrURLDuplicate = errors.New("duplicate url")
+	ErrNotFound        = errors.New("not found")
+	ErrURLDuplicate    = errors.New("duplicate url")
+	ErrNothingToDelete = errors.New("nothing to delete")
 )
 
 type Repository interface {
@@ -28,6 +30,10 @@ type Repository interface {
 	Save(ctx context.Context, shortURL *models.ShortURL) error
 
 	BatchSave(ctx context.Context, shortURLs []*models.ShortURL) error
+
+	BatchDelete(ctx context.Context, shortURLs []*models.ShortURL) error
+
+	FindAllByUserIDAndUIDs(ctx context.Context, userID uuid.UUID, uids []models.UID) ([]*models.ShortURL, error)
 
 	Ping(ctx context.Context) error
 }

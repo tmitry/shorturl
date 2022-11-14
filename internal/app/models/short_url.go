@@ -7,18 +7,20 @@ import (
 )
 
 type ShortURL struct {
-	ID     int
-	UID    UID
-	URL    URL
-	UserID uuid.UUID
+	ID        int
+	UID       UID
+	URL       URL
+	UserID    uuid.UUID
+	IsDeleted bool
 }
 
 func NewShortURL(id int, url URL, uid UID, userID uuid.UUID) *ShortURL {
 	return &ShortURL{
-		ID:     id,
-		UID:    uid,
-		URL:    url,
-		UserID: userID,
+		ID:        id,
+		UID:       uid,
+		URL:       url,
+		UserID:    userID,
+		IsDeleted: false,
 	}
 }
 

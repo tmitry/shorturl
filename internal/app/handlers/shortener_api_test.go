@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,6 +31,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 		uidGenerator     utils.UIDGenerator
 		rep              repositories.Repository
 		contextKeyUserID middlewares.ContextKey
+		deletionBuffer   utils.DeletionBuffer
 	}
 
 	type request struct {
@@ -51,16 +52,19 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 	cfg1 := configs.NewDefaultConfig()
 	uidGenerator1 := mocks.NewMockUIDGenerator(ctrl)
 	rep1 := mocks.NewMockRepository(ctrl)
+	deletionBuffer1 := mocks.NewMockDeletionBuffer(ctrl)
 
 	// test case 2
 	cfg2 := configs.NewDefaultConfig()
 	uidGenerator2 := mocks.NewMockUIDGenerator(ctrl)
 	rep2 := mocks.NewMockRepository(ctrl)
+	deletionBuffer2 := mocks.NewMockDeletionBuffer(ctrl)
 
 	// test case 3
 	cfg3 := configs.NewDefaultConfig()
 	uidGenerator3 := mocks.NewMockUIDGenerator(ctrl)
 	rep3 := mocks.NewMockRepository(ctrl)
+	deletionBuffer3 := mocks.NewMockDeletionBuffer(ctrl)
 
 	// test case 4
 	cfg4 := configs.NewDefaultConfig()
@@ -75,6 +79,8 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 	userID4 := uuid.New()
 	shortURL4 := models.NewShortURL(0, models.URL(url4), uid4, userID4)
 	rep4.EXPECT().Save(gomock.Any(), shortURL4).Return(nil)
+
+	deletionBuffer4 := mocks.NewMockDeletionBuffer(ctrl)
 	json4, err := json.Marshal(handlers.NewShortenResponseJSON(shortURL4.GetShortURL(cfg4.Server.BaseURL)))
 	require.NoError(t, err)
 
@@ -91,6 +97,8 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 	userID5 := uuid.New()
 	shortURL5 := models.NewShortURL(0, models.URL(url5), uid5, userID5)
 	rep5.EXPECT().Save(gomock.Any(), shortURL5).Return(repositories.ErrURLDuplicate)
+
+	deletionBuffer5 := mocks.NewMockDeletionBuffer(ctrl)
 	json5, err := json.Marshal(handlers.NewShortenResponseJSON(shortURL5.GetShortURL(cfg5.Server.BaseURL)))
 	require.NoError(t, err)
 
@@ -107,6 +115,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 				uidGenerator:     uidGenerator1,
 				rep:              rep1,
 				contextKeyUserID: "userId",
+				deletionBuffer:   deletionBuffer1,
 			},
 			request: request{
 				body:   `{"url":"https://example1.com/"}`,
@@ -125,6 +134,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 				uidGenerator:     uidGenerator2,
 				rep:              rep2,
 				contextKeyUserID: "userId",
+				deletionBuffer:   deletionBuffer2,
 			},
 			request: request{
 				body:   `bad json`,
@@ -147,6 +157,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 				uidGenerator:     uidGenerator3,
 				rep:              rep3,
 				contextKeyUserID: "userId",
+				deletionBuffer:   deletionBuffer3,
 			},
 			request: request{
 				body:   `{"url":"incorrect url"}`,
@@ -165,6 +176,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 				uidGenerator:     uidGenerator4,
 				rep:              rep4,
 				contextKeyUserID: "userId",
+				deletionBuffer:   deletionBuffer4,
 			},
 			request: request{
 				body:   body4,
@@ -183,6 +195,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 				uidGenerator:     uidGenerator5,
 				rep:              rep5,
 				contextKeyUserID: "USERID",
+				deletionBuffer:   deletionBuffer5,
 			},
 			request: request{
 				body:   body5,
@@ -205,6 +218,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 				testCase.fields.uidGenerator,
 				testCase.fields.rep,
 				testCase.fields.contextKeyUserID,
+				testCase.fields.deletionBuffer,
 			)
 
 			requestAPIShorten := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(testCase.request.body))
@@ -219,7 +233,7 @@ func TestShortenerAPIHandler_Shorten(t *testing.T) {
 			shortenerAPIHandler.Shorten(recorder, requestAPIShorten)
 			result := recorder.Result()
 
-			body, err := ioutil.ReadAll(result.Body)
+			body, err := io.ReadAll(result.Body)
 			require.NoError(t, err)
 			err = result.Body.Close()
 			require.NoError(t, err)
@@ -239,6 +253,7 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 		uidGenerator     utils.UIDGenerator
 		rep              repositories.Repository
 		contextKeyUserID middlewares.ContextKey
+		deletionBuffer   utils.DeletionBuffer
 	}
 
 	type request struct {
@@ -258,6 +273,7 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 	cfg1 := configs.NewDefaultConfig()
 	uidGenerator1 := mocks.NewMockUIDGenerator(ctrl)
 	rep1 := mocks.NewMockRepository(ctrl)
+	deletionBuffer1 := mocks.NewMockDeletionBuffer(ctrl)
 
 	// test case 2
 	cfg2 := configs.NewDefaultConfig()
@@ -265,6 +281,8 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 	userID2 := uuid.New()
 	rep2 := mocks.NewMockRepository(ctrl)
 	rep2.EXPECT().FindAllByUserID(gomock.Any(), userID2).Return(nil, repositories.ErrNotFound)
+
+	deletionBuffer2 := mocks.NewMockDeletionBuffer(ctrl)
 
 	// test case 3
 	cfg3 := configs.NewDefaultConfig()
@@ -284,6 +302,8 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 		models.NewShortURL(2, models.URL("https://example.com/2"), "uid2", userID3),
 	)
 	rep3.EXPECT().FindAllByUserID(gomock.Any(), userID3).Return(userShortURLs, nil)
+
+	deletionBuffer3 := mocks.NewMockDeletionBuffer(ctrl)
 	json3, err := json.Marshal(handlers.NewUserUrlsResponseJSON(userShortURLs, cfg3.Server.BaseURL))
 	require.NoError(t, err)
 
@@ -300,6 +320,7 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 				uidGenerator:     uidGenerator1,
 				rep:              rep1,
 				contextKeyUserID: "userID",
+				deletionBuffer:   deletionBuffer1,
 			},
 			request: request{
 				userID: "bad user id value",
@@ -317,6 +338,7 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 				uidGenerator:     uidGenerator2,
 				rep:              rep2,
 				contextKeyUserID: "userID",
+				deletionBuffer:   deletionBuffer2,
 			},
 			request: request{
 				userID: userID2,
@@ -334,6 +356,7 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 				uidGenerator:     uidGenerator3,
 				rep:              rep3,
 				contextKeyUserID: "userID",
+				deletionBuffer:   deletionBuffer3,
 			},
 			request: request{
 				userID: userID3,
@@ -355,6 +378,7 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 				testCase.fields.uidGenerator,
 				testCase.fields.rep,
 				testCase.fields.contextKeyUserID,
+				testCase.fields.deletionBuffer,
 			)
 
 			request := httptest.NewRequest(http.MethodPost, "/api/user/urls", nil)
@@ -371,7 +395,7 @@ func TestShortenerAPIHandler_UserUrls(t *testing.T) {
 			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
 			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
 
-			body, err := ioutil.ReadAll(result.Body)
+			body, err := io.ReadAll(result.Body)
 			require.NoError(t, err)
 			err = result.Body.Close()
 			require.NoError(t, err)
@@ -389,6 +413,7 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 		uidGenerator     utils.UIDGenerator
 		rep              repositories.Repository
 		contextKeyUserID middlewares.ContextKey
+		deletionBuffer   utils.DeletionBuffer
 	}
 
 	type request struct {
@@ -409,16 +434,19 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 	cfg1 := configs.NewDefaultConfig()
 	uidGenerator1 := mocks.NewMockUIDGenerator(ctrl)
 	rep1 := mocks.NewMockRepository(ctrl)
+	deletionBuffer1 := mocks.NewMockDeletionBuffer(ctrl)
 
 	// test case 2
 	cfg2 := configs.NewDefaultConfig()
 	uidGenerator2 := mocks.NewMockUIDGenerator(ctrl)
 	rep2 := mocks.NewMockRepository(ctrl)
+	deletionBuffer2 := mocks.NewMockDeletionBuffer(ctrl)
 
 	// test case 3
 	cfg3 := configs.NewDefaultConfig()
 	uidGenerator3 := mocks.NewMockUIDGenerator(ctrl)
 	rep3 := mocks.NewMockRepository(ctrl)
+	deletionBuffer3 := mocks.NewMockDeletionBuffer(ctrl)
 
 	// test case 4
 	cfg4 := configs.NewDefaultConfig()
@@ -449,6 +477,8 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 		models.NewShortURL(0, urls[1], uid42, userID4),
 	}
 	rep4.EXPECT().BatchSave(gomock.Any(), shortURLs).Return(nil)
+
+	deletionBuffer4 := mocks.NewMockDeletionBuffer(ctrl)
 	json4, err := json.Marshal(handlers.NewShortenBatchResponseJSON(
 		shortURLs,
 		correlationIDs,
@@ -469,6 +499,7 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 				uidGenerator:     uidGenerator1,
 				rep:              rep1,
 				contextKeyUserID: "userID",
+				deletionBuffer:   deletionBuffer1,
 			},
 			request: request{
 				body:   `[{"correlation_id": "u1", "original_url": "https://mysite.com?id=u1"}]`,
@@ -487,6 +518,7 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 				uidGenerator:     uidGenerator2,
 				rep:              rep2,
 				contextKeyUserID: "userID",
+				deletionBuffer:   deletionBuffer2,
 			},
 			request: request{
 				body:   `bad json`,
@@ -509,6 +541,7 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 				uidGenerator:     uidGenerator3,
 				rep:              rep3,
 				contextKeyUserID: "userID",
+				deletionBuffer:   deletionBuffer3,
 			},
 			request: request{
 				body:   `[{"correlation_id": "u1", "original_url": "bad url"}]`,
@@ -527,6 +560,7 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 				uidGenerator:     uidGenerator4,
 				rep:              rep4,
 				contextKeyUserID: "userID",
+				deletionBuffer:   deletionBuffer4,
 			},
 			request: request{
 				body:   body4,
@@ -550,6 +584,7 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 				testCase.fields.uidGenerator,
 				testCase.fields.rep,
 				testCase.fields.contextKeyUserID,
+				testCase.fields.deletionBuffer,
 			)
 
 			requestShortenAPIBatch := httptest.NewRequest(
@@ -570,12 +605,157 @@ func TestShortenerAPIHandler_ShortenBatch(t *testing.T) {
 			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
 			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
 
-			body, err := ioutil.ReadAll(result.Body)
+			body, err := io.ReadAll(result.Body)
 			require.NoError(t, err)
 			err = result.Body.Close()
 			require.NoError(t, err)
 
 			assert.Equal(t, testCase.response.body, strings.TrimSuffix(string(body), "\n"))
+		})
+	}
+}
+
+func TestShortenerAPIHandler_DeleteUserUrls(t *testing.T) {
+	t.Parallel()
+
+	type fields struct {
+		cfg              *configs.Config
+		uidGenerator     utils.UIDGenerator
+		rep              repositories.Repository
+		contextKeyUserID middlewares.ContextKey
+		deletionBuffer   utils.DeletionBuffer
+	}
+
+	type request struct {
+		body   string
+		userID any
+	}
+
+	type response struct {
+		statusCode  int
+		contentType string
+	}
+
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	// test case 1
+	cfg1 := configs.NewDefaultConfig()
+	uidGenerator1 := mocks.NewMockUIDGenerator(ctrl)
+	rep1 := mocks.NewMockRepository(ctrl)
+	deletionBuffer1 := mocks.NewMockDeletionBuffer(ctrl)
+
+	// test case 2
+	cfg2 := configs.NewDefaultConfig()
+	uidGenerator2 := mocks.NewMockUIDGenerator(ctrl)
+	rep2 := mocks.NewMockRepository(ctrl)
+	deletionBuffer2 := mocks.NewMockDeletionBuffer(ctrl)
+
+	// test case 3
+	cfg3 := configs.NewDefaultConfig()
+	uidGenerator3 := mocks.NewMockUIDGenerator(ctrl)
+	rep3 := mocks.NewMockRepository(ctrl)
+	uids := []models.UID{"KMWvryWdM", "eqRzawRDj"}
+	body3 := fmt.Sprintf(`["%s", "%s"]`, uids[0], uids[1])
+	userID3 := uuid.New()
+	deletionBuffer3 := mocks.NewMockDeletionBuffer(ctrl)
+	deletionBuffer3.EXPECT().Push(uids, userID3)
+
+	tests := []struct {
+		name     string
+		fields   fields
+		request  request
+		response response
+	}{
+		{
+			name: "test case 1: incorrect user id",
+			fields: fields{
+				cfg:              cfg1,
+				uidGenerator:     uidGenerator1,
+				rep:              rep1,
+				contextKeyUserID: "userID",
+				deletionBuffer:   deletionBuffer1,
+			},
+			request: request{
+				body:   `["KMWvryWdM", "eqRzawRDj"]`,
+				userID: "bad user id value",
+			},
+			response: response{
+				statusCode:  http.StatusInternalServerError,
+				contentType: handlers.ContentTypeText,
+			},
+		},
+		{
+			name: "test case 2: incorrect json",
+			fields: fields{
+				cfg:              cfg2,
+				uidGenerator:     uidGenerator2,
+				rep:              rep2,
+				contextKeyUserID: "user",
+				deletionBuffer:   deletionBuffer2,
+			},
+			request: request{
+				body:   `incorrect json`,
+				userID: uuid.New(),
+			},
+			response: response{
+				statusCode:  http.StatusBadRequest,
+				contentType: handlers.ContentTypeText,
+			},
+		},
+		{
+			name: "test case 3: accepted",
+			fields: fields{
+				cfg:              cfg3,
+				uidGenerator:     uidGenerator3,
+				rep:              rep3,
+				contextKeyUserID: "jwt",
+				deletionBuffer:   deletionBuffer3,
+			},
+			request: request{
+				body:   body3,
+				userID: userID3,
+			},
+			response: response{
+				statusCode:  http.StatusAccepted,
+				contentType: handlers.ContentTypeText,
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			shortenerAPIHandler := handlers.NewShortenerAPIHandler(
+				testCase.fields.cfg,
+				testCase.fields.uidGenerator,
+				testCase.fields.rep,
+				testCase.fields.contextKeyUserID,
+				testCase.fields.deletionBuffer,
+			)
+
+			requestShortenAPIBatch := httptest.NewRequest(
+				http.MethodDelete,
+				"/api/user/urls",
+				strings.NewReader(testCase.request.body),
+			)
+			requestShortenAPIBatch = requestShortenAPIBatch.WithContext(context.WithValue(
+				requestShortenAPIBatch.Context(),
+				testCase.fields.contextKeyUserID,
+				testCase.request.userID,
+			))
+
+			recorder := httptest.NewRecorder()
+			shortenerAPIHandler.DeleteUserUrls(recorder, requestShortenAPIBatch)
+			result := recorder.Result()
+
+			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
+			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
+
+			err := result.Body.Close()
+			require.NoError(t, err)
 		})
 	}
 }

@@ -40,7 +40,10 @@ func NewRouter(cfg *configs.Config) http.Handler {
 	uidGenerator := utils.NewHashidsUIDGenerator(cfg.App.HashMinLength, cfg.App.HashSalt)
 
 	shortenerHandler := handlers.NewShortenerHandler(cfg, uidGenerator, rep, ContextKeyUserID)
-	shortenerAPIHandler := handlers.NewShortenerAPIHandler(cfg, uidGenerator, rep, ContextKeyUserID)
+
+	deletionBuffer := utils.NewBackgroundDeletionBuffer(rep, cfg.App, uidGenerator)
+
+	shortenerAPIHandler := handlers.NewShortenerAPIHandler(cfg, uidGenerator, rep, ContextKeyUserID, deletionBuffer)
 
 	router.Route("/", func(router chi.Router) {
 		router.Use(middleware.AllowContentType(handlers.ContentTypeText, handlers.ContentTypeGZIP))
@@ -60,6 +63,7 @@ func NewRouter(cfg *configs.Config) http.Handler {
 		router.Post("/shorten", shortenerAPIHandler.Shorten)
 		router.Get("/user/urls", shortenerAPIHandler.UserUrls)
 		router.Post("/shorten/batch", shortenerAPIHandler.ShortenBatch)
+		router.Delete("/user/urls", shortenerAPIHandler.DeleteUserUrls)
 	})
 
 	return router

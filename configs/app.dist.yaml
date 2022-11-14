@@ -1,3 +1,5 @@
 hash_salt: '_X@kQePA8dmBiZVBHax*zUUi'
 hash_min_length: 5
 file_storage_path: ''
+deletion_buffer_max_size: 500
+deletion_buffer_clear_timeout: 5

@@ -36,6 +36,20 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 	return m.recorder
 }
 
+// BatchDelete mocks base method.
+func (m *MockRepository) BatchDelete(arg0 context.Context, arg1 []*models.ShortURL) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchDelete", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchDelete indicates an expected call of BatchDelete.
+func (mr *MockRepositoryMockRecorder) BatchDelete(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchDelete", reflect.TypeOf((*MockRepository)(nil).BatchDelete), arg0, arg1)
+}
+
 // BatchSave mocks base method.
 func (m *MockRepository) BatchSave(arg0 context.Context, arg1 []*models.ShortURL) error {
 	m.ctrl.T.Helper()
@@ -63,6 +77,21 @@ func (m *MockRepository) FindAllByUserID(arg0 context.Context, arg1 uuid.UUID) (
 func (mr *MockRepositoryMockRecorder) FindAllByUserID(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAllByUserID", reflect.TypeOf((*MockRepository)(nil).FindAllByUserID), arg0, arg1)
+}
+
+// FindAllByUserIDAndUIDs mocks base method.
+func (m *MockRepository) FindAllByUserIDAndUIDs(arg0 context.Context, arg1 uuid.UUID, arg2 []models.UID) ([]*models.ShortURL, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindAllByUserIDAndUIDs", arg0, arg1, arg2)
+	ret0, _ := ret[0].([]*models.ShortURL)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindAllByUserIDAndUIDs indicates an expected call of FindAllByUserIDAndUIDs.
+func (mr *MockRepositoryMockRecorder) FindAllByUserIDAndUIDs(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAllByUserIDAndUIDs", reflect.TypeOf((*MockRepository)(nil).FindAllByUserIDAndUIDs), arg0, arg1, arg2)
 }
 
 // FindOneByUID mocks base method.

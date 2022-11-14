@@ -47,6 +47,9 @@ func (m *MemoryRepository) FindAllByUserID(_ context.Context, userID uuid.UUID) 
 }
 
 func (m *MemoryRepository) Save(_ context.Context, shortURL *models.ShortURL) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	userShortURLs, ok := m.userShortURLs[shortURL.UserID]
 	if ok {
 		for _, userShortURL := range userShortURLs {
@@ -57,9 +60,6 @@ func (m *MemoryRepository) Save(_ context.Context, shortURL *models.ShortURL) er
 			}
 		}
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	m.shortURLs[shortURL.UID] = shortURL
 	m.userShortURLs[shortURL.UserID] = append(m.userShortURLs[shortURL.UserID], shortURL)
@@ -95,6 +95,42 @@ func (m *MemoryRepository) BatchSave(_ context.Context, shortURLs []*models.Shor
 	}
 
 	return nil
+}
+
+func (m *MemoryRepository) BatchDelete(_ context.Context, shortURLs []*models.ShortURL) error {
+	if len(shortURLs) == 0 {
+		return ErrNothingToDelete
+	}
+
+	for _, shortURL := range shortURLs {
+		shortURL.IsDeleted = true
+	}
+
+	return nil
+}
+
+func (m *MemoryRepository) FindAllByUserIDAndUIDs(
+	_ context.Context,
+	userID uuid.UUID,
+	uids []models.UID,
+) ([]*models.ShortURL, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var shortURLs []*models.ShortURL
+
+	for _, uid := range uids {
+		shortURL, ok := m.shortURLs[uid]
+		if ok && shortURL.UserID == userID {
+			shortURLs = append(shortURLs, shortURL)
+		}
+	}
+
+	if len(shortURLs) == 0 {
+		return nil, ErrNotFound
+	}
+
+	return shortURLs, nil
 }
 
 func (m *MemoryRepository) Ping(_ context.Context) error {
