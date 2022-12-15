@@ -95,7 +95,7 @@ func TestJWTAuth(t *testing.T) {
 			})
 
 			body := []byte("The best content in the world. Than you for your attention.")
-			req := httptest.NewRequest("POST", "/", bytes.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
 
 			if testCase.args.jwt != nil {
 				val, err := testCase.args.jwt.GetString()

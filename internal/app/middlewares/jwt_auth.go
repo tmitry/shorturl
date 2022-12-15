@@ -216,6 +216,7 @@ func jwtWrite(writer http.ResponseWriter, jwt *JWT, jwtCookieName string) error 
 	jwtCookie := &http.Cookie{
 		Name:  jwtCookieName,
 		Value: val,
+		Path:  "/",
 	}
 
 	http.SetCookie(writer, jwtCookie)

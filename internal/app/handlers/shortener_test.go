@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -81,7 +81,7 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 	uidGenerator4.EXPECT().Generate().Return(uid4, nil)
 
 	rep4 := mocks.NewMockRepository(ctrl)
-	url4 := "https://example.com/"
+	url4 := "https://deleted-url.com/"
 	userID4 := uuid.New()
 	shortURL4 := models.NewShortURL(0, models.URL(url4), uid4, userID4)
 	rep4.EXPECT().Save(
@@ -236,7 +236,7 @@ func TestShortenerHandler_Shorten(t *testing.T) {
 
 			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
 
-			body, err := ioutil.ReadAll(result.Body)
+			body, err := io.ReadAll(result.Body)
 			require.NoError(t, err)
 			err = result.Body.Close()
 			require.NoError(t, err)
@@ -297,6 +297,18 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 	url3 := "https://example.com/"
 	shortURL3 := models.NewShortURL(1, models.URL(url3), uid3, uuid.New())
 	rep3.EXPECT().FindOneByUID(gomock.Any(), uid3).Return(shortURL3, nil)
+
+	// test case 4
+	cfg4 := configs.NewDefaultConfig()
+	uid4 := models.UID("AbCdEFg")
+	uidGenerator4 := mocks.NewMockUIDGenerator(ctrl)
+	uidGenerator4.EXPECT().IsValid(uid3).Return(true, nil)
+
+	rep4 := mocks.NewMockRepository(ctrl)
+	url4 := "https://example.com/"
+	shortURL4 := models.NewShortURL(1, models.URL(url4), uid4, uuid.New())
+	shortURL4.IsDeleted = true
+	rep4.EXPECT().FindOneByUID(gomock.Any(), uid4).Return(shortURL4, nil)
 
 	tests := []struct {
 		name     string
@@ -366,6 +378,28 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 				location:    url3,
 			},
 		},
+		{
+			name: "test case 4: gone",
+			fields: fields{
+				cfg:              cfg4,
+				uidGenerator:     uidGenerator4,
+				rep:              rep4,
+				contextKeyUserID: "jwt",
+			},
+			request: request{
+				uid: uid4.String(),
+			},
+			response: response{
+				statusCode:  http.StatusGone,
+				contentType: handlers.ContentTypeText,
+				body: fmt.Sprintf(
+					"%s: %s",
+					http.StatusText(http.StatusGone),
+					handlers.MessageURLWasDeleted,
+				),
+				location: "",
+			},
+		},
 	}
 	for _, testCase := range tests {
 		testCase := testCase
@@ -391,7 +425,7 @@ func TestShortenerHandler_Redirect(t *testing.T) {
 			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
 			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
 
-			body, err := ioutil.ReadAll(result.Body)
+			body, err := io.ReadAll(result.Body)
 			require.NoError(t, err)
 			err = result.Body.Close()
 			require.NoError(t, err)
@@ -485,7 +519,7 @@ func TestShortenerHandler_Ping(t *testing.T) {
 			assert.Equal(t, testCase.response.statusCode, result.StatusCode)
 			assert.Equal(t, testCase.response.contentType, handlers.GetContentType(result))
 
-			body, err := ioutil.ReadAll(result.Body)
+			body, err := io.ReadAll(result.Body)
 			require.NoError(t, err)
 			err = result.Body.Close()
 			require.NoError(t, err)

@@ -21,7 +21,7 @@ type shortenRequestJSON struct {
 	URL models.URL `json:"url"`
 }
 
-func NewShortenRequestJSON() *shortenRequestJSON {
+func newShortenRequestJSON() *shortenRequestJSON {
 	return &shortenRequestJSON{
 		URL: "",
 	}
@@ -79,6 +79,7 @@ type ShortenerAPIHandler struct {
 	uidGenerator     utils.UIDGenerator
 	rep              repositories.Repository
 	contextKeyUserID middlewares.ContextKey
+	deletionBuffer   utils.DeletionBuffer
 }
 
 func NewShortenerAPIHandler(
@@ -86,12 +87,14 @@ func NewShortenerAPIHandler(
 	uidGenerator utils.UIDGenerator,
 	rep repositories.Repository,
 	contextKeyUserID middlewares.ContextKey,
+	deletionBuffer utils.DeletionBuffer,
 ) *ShortenerAPIHandler {
 	return &ShortenerAPIHandler{
 		cfg:              cfg,
 		uidGenerator:     uidGenerator,
 		rep:              rep,
 		contextKeyUserID: contextKeyUserID,
+		deletionBuffer:   deletionBuffer,
 	}
 }
 
@@ -120,7 +123,7 @@ func (h ShortenerAPIHandler) Shorten(writer http.ResponseWriter, request *http.R
 		}
 	}(reader)
 
-	requestJSON := NewShortenRequestJSON()
+	requestJSON := newShortenRequestJSON()
 	if err := json.NewDecoder(reader).Decode(requestJSON); err != nil {
 		http.Error(writer, fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectJSON),
 			http.StatusBadRequest)
@@ -323,4 +326,47 @@ func (h ShortenerAPIHandler) ShortenBatch(writer http.ResponseWriter, request *h
 
 		return
 	}
+}
+
+func (h ShortenerAPIHandler) DeleteUserUrls(writer http.ResponseWriter, request *http.Request) {
+	userID, ok := request.Context().Value(h.contextKeyUserID).(uuid.UUID)
+	if !ok {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(MessageIncorrectUserID)
+
+		return
+	}
+
+	reader, err := getRequestReader(request)
+	if err != nil {
+		http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Println(err.Error())
+
+		return
+	}
+
+	defer func(reader io.ReadCloser) {
+		err := reader.Close()
+		if err != nil {
+			http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			log.Println(err.Error())
+		}
+	}(reader)
+
+	var uids []models.UID
+
+	if err := json.NewDecoder(reader).Decode(&uids); err != nil {
+		http.Error(
+			writer,
+			fmt.Sprintf("%s: %s", http.StatusText(http.StatusBadRequest), MessageIncorrectJSON),
+			http.StatusBadRequest,
+		)
+
+		return
+	}
+
+	h.deletionBuffer.Push(uids, userID)
+
+	writer.Header().Set("Content-Type", ContentTypeText)
+	writer.WriteHeader(http.StatusAccepted)
 }
