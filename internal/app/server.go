@@ -46,6 +46,8 @@ func NewRouter(cfg *configs.Config) http.Handler {
 	shortenerAPIHandler := handlers.NewShortenerAPIHandler(cfg, uidGenerator, rep, ContextKeyUserID, deletionBuffer)
 
 	router.Route("/", func(router chi.Router) {
+		router.Use(middleware.Logger)
+		router.Use(middleware.Recoverer)
 		router.Use(middleware.AllowContentType(handlers.ContentTypeText, handlers.ContentTypeGZIP))
 		router.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
 		router.Post("/", shortenerHandler.Shorten)
@@ -58,6 +60,8 @@ func NewRouter(cfg *configs.Config) http.Handler {
 	})
 
 	router.Route("/api", func(router chi.Router) {
+		router.Use(middleware.Logger)
+		router.Use(middleware.Recoverer)
 		router.Use(middleware.AllowContentType(handlers.ContentTypeJSON, handlers.ContentTypeGZIP))
 		router.Use(middleware.AllowContentEncoding(handlers.ContentEncodingGZIP))
 		router.Post("/shorten", shortenerAPIHandler.Shorten)
