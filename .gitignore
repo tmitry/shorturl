@@ -30,3 +30,6 @@ test.sh
 
 # GolangCI-Lint config
 .golangci.yml
+
+# Auto-tests
+shortenertest
